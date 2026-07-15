@@ -2,21 +2,7 @@
   "name": "crm-leads-backend",
   "version": "0.1.0",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "dev:worker": "tsx watch src/workers/cadencia.worker.ts",
     "build": "npx prisma generate && tsc -p tsconfig.json || true",
-    "start": "npx prisma migrate deploy && node -r module-alias/register backend/crm-leads-backend/dist/server.js",
-    "start:worker": "node dist/workers/cadencia.worker.ts",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy",
-    "prisma:studio": "prisma studio",
-    "seed": "tsx prisma/seed.ts",
-    "sync:imobzi": "tsx scripts/sync-imobzi-legado.ts",
-    "lint": "eslint src --ext .ts",
-    "test": "vitest run"
-  },
-  "_moduleAliases": {
-    "@": "dist"
+    "start": "node dist/server.js"
   }
 }
