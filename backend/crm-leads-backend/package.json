@@ -5,7 +5,7 @@
     "dev": "tsx watch src/server.ts",
     "dev:worker": "tsx watch src/workers/cadencia.worker.ts",
     "build": "npx prisma generate && tsc -p tsconfig.json || true",
-    "start": "node -r module-alias/register dist/server.js",
+    "start": "node -r module-alias/register $(find dist -name server.js | head -n 1)",
     "start:worker": "node dist/workers/cadencia.worker.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
