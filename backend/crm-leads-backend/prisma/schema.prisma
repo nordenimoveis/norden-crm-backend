@@ -1,0 +1,245 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  gestor
+  corretor
+  admin
+}
+
+enum LeadStatus {
+  novo             // Novo Lead
+  respondeu        // Aguardando Resposta (transbordo humano da Fase 4)
+  em_atendimento   // Em Atendimento (corretor assumiu a conversa manualmente)
+  visita_agendada  // Visita Agendada
+  proposta         // Proposta
+  negocio_fechado  // Negócio Fechado
+  perdido
+  frio_standby     // Passo 4 da cadência concluído sem resposta
+}
+
+enum LeadOrigem {
+  meta_ads
+  site_imobzi    // lead do formulário do site, que hoje cai primeiro no Imobzi (gateway)
+  legado_imobzi  // importado da base antiga do Imobzi — nunca entra em roleta/cadência
+}
+
+enum LeadTemperatura {
+  nao_avaliado  // padrão para lead novo — o corretor só sabe a temperatura após o 1º contato
+  frio
+  morno
+  quente
+}
+
+enum ExecucaoStatus {
+  ativa
+  pausada
+  concluida
+  cancelada
+}
+
+enum MensagemDirecao {
+  enviada
+  recebida
+}
+
+enum MensagemStatus {
+  pendente
+  enviada
+  entregue
+  lida
+  falhou
+}
+
+model Usuario {
+  id           String   @id @default(uuid())
+  nome         String
+  email        String   @unique
+  senhaHash    String   @map("senha_hash")
+  papel        UserRole @default(corretor)
+  ativo        Boolean  @default(true)
+  ordemRoleta  Int      @default(0) @map("ordem_roleta") // posição na fila do round-robin de distribuição de leads
+  criadoEm     DateTime @default(now()) @map("criado_em")
+  atualizadoEm DateTime @updatedAt @map("atualizado_em")
+
+  leads             Lead[]       @relation("CorretorLeads")
+  mensagensEnviadas Mensagem[]   @relation("MensagemEnviadaPor")
+  quickReplies      QuickReply[] @relation("QuickReplyDoUsuario")
+
+  @@map("usuarios")
+}
+
+model Imovel {
+  id                 String   @id @default(uuid())
+  titulo             String
+  bairro             String?
+  cidade             String   @default("Florianópolis")
+  valor              Decimal? @db.Decimal(14, 2)
+  referenciaExterna  String?  @map("referencia_externa")
+  ativo              Boolean  @default(true)
+  criadoEm           DateTime @default(now()) @map("criado_em")
+
+  leads Lead[]
+
+  @@map("imoveis")
+}
+
+model Campanha {
+  id             String   @id @default(uuid())
+  nome           String
+  metaCampaignId String?  @map("meta_campaign_id")
+  metaFormId     String?  @map("meta_form_id")
+  ativo          Boolean  @default(true)
+  criadoEm       DateTime @default(now()) @map("criado_em")
+
+  leads Lead[]
+
+  @@map("campanhas")
+}
+
+model Lead {
+  id           String     @id @default(uuid())
+  nome         String?
+  telefone     String
+  email        String?
+
+  campanhaId   String?    @map("campanha_id")
+  campanha     Campanha?  @relation(fields: [campanhaId], references: [id])
+
+  imovelId     String?    @map("imovel_id")
+  imovel       Imovel?    @relation(fields: [imovelId], references: [id])
+
+  corretorId   String?    @map("corretor_id")
+  corretor     Usuario?   @relation("CorretorLeads", fields: [corretorId], references: [id])
+
+  status       LeadStatus @default(novo)
+  origem       LeadOrigem @default(meta_ads)
+  temperatura  LeadTemperatura @default(nao_avaliado)
+  imobziId     String?    @unique @map("imobzi_id") // evita duplicidade ao receber o mesmo lead do Imobzi mais de uma vez
+  atendimentoHumano Boolean @default(false) @map("atendimento_humano")
+  payloadBruto Json?      @map("payload_bruto")
+
+  criadoEm     DateTime   @default(now()) @map("criado_em")
+  atualizadoEm DateTime   @updatedAt @map("atualizado_em")
+
+  execucoesCadencia LeadCadenciaExecucao[]
+  mensagens         Mensagem[]
+
+  @@unique([telefone, campanhaId])
+  @@index([status])
+  @@index([corretorId])
+  @@index([temperatura])
+  @@map("leads")
+}
+
+model Cadencia {
+  id        String   @id @default(uuid())
+  nome      String
+  ativo     Boolean  @default(true)
+  padrao    Boolean  @default(false) // cadência aplicada automaticamente a todo novo lead
+  criadoEm  DateTime @default(now()) @map("criado_em")
+
+  passos    CadenciaPasso[]
+  execucoes LeadCadenciaExecucao[]
+
+  @@map("cadencias")
+}
+
+model CadenciaPasso {
+  id                 String   @id @default(uuid())
+  cadenciaId         String   @map("cadencia_id")
+  cadencia           Cadencia @relation(fields: [cadenciaId], references: [id], onDelete: Cascade)
+  ordem              Int
+  atrasoMinutos      Int      @map("atraso_minutos")
+  templateMensagemId String?  @map("template_mensagem_id")
+  template           TemplateMensagem? @relation(fields: [templateMensagemId], references: [id])
+  condicao           String   @default("sem_resposta")
+
+  @@unique([cadenciaId, ordem])
+  @@map("cadencia_passos")
+}
+
+model LeadCadenciaExecucao {
+  id                String         @id @default(uuid())
+  leadId            String         @map("lead_id")
+  lead              Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  cadenciaId        String         @map("cadencia_id")
+  cadencia          Cadencia       @relation(fields: [cadenciaId], references: [id])
+  passoAtual        Int            @default(0) @map("passo_atual")
+  status            ExecucaoStatus @default(ativa)
+  proximoDisparoEm  DateTime?      @map("proximo_disparo_em")
+  proximoJobId      String?        @map("proximo_job_id") // ID do job no BullMQ/Redis — usado para cancelar o disparo agendado se o lead responder antes
+  iniciadaEm        DateTime       @default(now()) @map("iniciada_em")
+  atualizadaEm      DateTime       @updatedAt @map("atualizada_em")
+
+  @@index([proximoDisparoEm])
+  @@map("lead_cadencia_execucao")
+}
+
+model TemplateMensagem {
+  id               String   @id @default(uuid())
+  nome             String
+  conteudo         String
+  metaTemplateName String?  @map("meta_template_name")
+  aprovadoMeta     Boolean  @default(false) @map("aprovado_meta")
+  criadoEm         DateTime @default(now()) @map("criado_em")
+
+  passos    CadenciaPasso[]
+  mensagens Mensagem[]
+
+  @@map("templates_mensagem")
+}
+
+enum QuickReplyTipo {
+  global   // criado pelo Admin/Gestor, visível para toda a equipe
+  pessoal  // criado por um corretor, visível só para ele
+}
+
+model QuickReply {
+  id             String         @id @default(uuid())
+  titulo         String         // usado na busca rápida do popover (Next.js)
+  textoMensagem  String         @map("texto_mensagem") // suporta variáveis: {{lead_name}}, {{broker_name}}
+  tipo           QuickReplyTipo
+
+  // Dono do template — obrigatório quando tipo = 'pessoal', null quando 'global'.
+  usuarioId      String?        @map("usuario_id")
+  usuario        Usuario?       @relation("QuickReplyDoUsuario", fields: [usuarioId], references: [id])
+
+  ativo          Boolean        @default(true)
+  criadoEm       DateTime       @default(now()) @map("criado_em")
+  atualizadoEm   DateTime       @updatedAt @map("atualizado_em")
+
+  @@index([tipo])
+  @@index([usuarioId])
+  @@map("quick_replies")
+}
+
+model Mensagem {
+  id                 String          @id @default(uuid())
+  leadId             String          @map("lead_id")
+  lead               Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  direcao            MensagemDirecao
+  conteudo           String
+  templateId         String?         @map("template_id")
+  template           TemplateMensagem? @relation(fields: [templateId], references: [id])
+  status             MensagemStatus  @default(pendente)
+  whatsappMessageId  String?         @map("whatsapp_message_id")
+
+  // null = mensagem automática (cadência); preenchido = corretor que respondeu manualmente pelo chat.
+  // Importante no modelo de "Número Único": several corretores usam a mesma conexão de WhatsApp,
+  // então isso é o que permite saber quem disse o quê.
+  enviadaPorUsuarioId String?  @map("enviada_por_usuario_id")
+  enviadaPorUsuario   Usuario? @relation("MensagemEnviadaPor", fields: [enviadaPorUsuarioId], references: [id])
+
+  enviadaEm          DateTime?       @map("enviada_em")
+  criadoEm           DateTime        @default(now()) @map("criado_em")
+
+  @@index([leadId, criadoEm])
+  @@map("mensagens")
+}
