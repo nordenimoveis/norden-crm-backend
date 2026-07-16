@@ -1,4 +1,4 @@
-import { PrismaClient, Lead } from '@prisma/client';
+import { PrismaClient, Lead, Prisma } from '@prisma/client';
 import {
   CriarLeadInput,
   ImobziWebhookLeadInput,
@@ -13,7 +13,7 @@ import { CadenciasService } from '@/modules/cadencias/cadencias.service';
 import { RoundRobinService } from '@/lib/round-robin';
 import { notificarLeadAtualizado } from '@/lib/pusher';
 
-export type UsuarioAutenticado = { id: string; papel: 'gestor' | 'corretor' | 'admin' };
+export type UsuarioAutenticado = { sub: string; papel: 'gestor' | 'corretor' | 'admin' };
 
 export class LeadsService {
   private cadenciasService: CadenciasService;
@@ -42,12 +42,13 @@ export class LeadsService {
     const corretorId = await this.roundRobinService.proximoCorretor();
 
     const lead = await this.prisma.lead.create({
-      data: { ...dados, corretorId },
+      data: {
+        ...dados,
+        corretorId,
+        payloadBruto: dados.payloadBruto as Prisma.InputJsonValue | undefined,
+      },
     });
 
-    // Regra de negócio explícita (Fase 5 + Imobzi): todo lead que passa por
-    // aqui DEVE ser distribuído (já feito acima) e DEVE disparar o Passo 1
-    // imediatamente — diferente do fluxo passivo de importação da base antiga.
     await this.cadenciasService.iniciarCadenciaParaLead(lead.id);
 
     await notificarLeadAtualizado({
@@ -85,10 +86,6 @@ export class LeadsService {
    * primeiro no Imobzi. Quando o Imobzi nos avisa via webhook, o lead
    * PRECISA passar pelo round-robin e disparar o Passo 1 imediatamente —
    * mesma regra de negócio do Meta Ads, só muda a origem e o identificador.
-   *
-   * Deduplicação por `imobziId` (não por telefone): o Imobzi pode reenviar
-   * o mesmo ping mais de uma vez (retry de webhook é comum), e o `imobzi_id`
-   * é o identificador estável para evitar processar o mesmo lead duas vezes.
    */
   async criarDeImobziWebhook(input: ImobziWebhookLeadInput) {
     const existente = await this.prisma.lead.findUnique({ where: { imobziId: input.imobzi_id } });
@@ -107,10 +104,7 @@ export class LeadsService {
   /**
    * Entrada 3 (Imobzi — Rota "Passiva"): importação em lote da base antiga.
    * REGRA CRÍTICA DE NEGÓCIO: estes leads NUNCA passam pelo round-robin
-   * (ficam sem corretor atribuído — ou podem ser distribuídos manualmente
-   * depois) e NUNCA disparam a cadência do WhatsApp, para não arriscar
-   * banimento do número com envios em massa para uma base antiga e fria.
-   * A tag "Base Antiga" é o próprio `origem = 'legado_imobzi'`.
+   * e NUNCA disparam a cadência do WhatsApp.
    */
   async importarLeadLegado(input: ImobziLeadLegadoInput) {
     const existente = await this.prisma.lead.findUnique({ where: { imobziId: input.id } });
@@ -124,7 +118,6 @@ export class LeadsService {
         origem: 'legado_imobzi',
         imobziId: input.id,
         status: 'novo',
-        // corretorId e execução de cadência propositalmente NÃO são criados aqui
       },
     });
 
@@ -135,12 +128,9 @@ export class LeadsService {
     const { page, pageSize, busca, ...filtros } = query;
 
     if (usuario.papel === 'corretor') {
-      filtros.corretorId = usuario.id;
+      filtros.corretorId = usuario.sub;
     }
 
-    // `busca` é livre (nome OU telefone), então precisa de um OR separado dos
-    // filtros de igualdade (status, origem, temperatura, corretorId...), que
-    // continuam se comportando como AND entre si.
     const where = {
       ...filtros,
       ...(busca
@@ -180,7 +170,7 @@ export class LeadsService {
     });
 
     if (!lead) return null;
-    if (usuario.papel === 'corretor' && lead.corretorId !== usuario.id) {
+    if (usuario.papel === 'corretor' && lead.corretorId !== usuario.sub) {
       throw new Error('SEM_PERMISSAO');
     }
 
@@ -195,7 +185,7 @@ export class LeadsService {
     const lead = await this.prisma.lead.findUnique({ where: { id } });
     if (!lead) throw new Error('LEAD_NAO_ENCONTRADO');
 
-    if (usuario.papel === 'corretor' && lead.corretorId !== usuario.id) {
+    if (usuario.papel === 'corretor' && lead.corretorId !== usuario.sub) {
       throw new Error('SEM_PERMISSAO');
     }
 
@@ -218,17 +208,11 @@ export class LeadsService {
     return atualizado;
   }
 
-  /**
-   * Atualização RÁPIDA da temperatura (FRIO/MORNO/QUENTE) — pensada para o
-   * dropdown direto no card do Kanban ou no cabeçalho do chat, sem precisar
-   * abrir a ficha completa do lead. Mesma regra de dono que o resto: corretor
-   * só altera a temperatura dos próprios leads.
-   */
   async atualizarTemperatura(id: string, input: AtualizarTemperaturaInput, usuario: UsuarioAutenticado) {
     const lead = await this.prisma.lead.findUnique({ where: { id } });
     if (!lead) throw new Error('LEAD_NAO_ENCONTRADO');
 
-    if (usuario.papel === 'corretor' && lead.corretorId !== usuario.id) {
+    if (usuario.papel === 'corretor' && lead.corretorId !== usuario.sub) {
       throw new Error('SEM_PERMISSAO');
     }
 
