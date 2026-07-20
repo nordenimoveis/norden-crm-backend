@@ -26,11 +26,6 @@ export const criarLeadSchema = z.object({
   payloadBruto: z.record(z.any()).optional(),
 });
 
-/**
- * Formato NORMALIZADO interno usado pelo LeadsService — já traduzido a partir
- * da estrutura real do Imobzi (que vive em `imobzi.schema.ts`). Manter o
- * LeadsService desacoplado do formato de campos específico do Imobzi.
- */
 export const imobziWebhookLeadSchema = z.object({
   imobzi_id: z.string().min(1),
   nome: z.string().min(1).optional(),
@@ -45,25 +40,24 @@ export const imobziLeadLegadoSchema = z.object({
   email: z.string().email().nullable().optional(),
 });
 
+// Edição de dados básicos do lead — status e corretorId NÃO entram aqui de
+// propósito: já existem rotas dedicadas (atualizarStatus/atribuirCorretor)
+// com verificação de RBAC própria.
 export const atualizarLeadSchema = z.object({
   nome: z.string().min(1).optional(),
+  telefone: z.string().min(8, 'Telefone inválido').optional(),
   email: z.string().email().optional(),
-  status: leadStatusEnum.optional(),
-  corretorId: z.string().uuid().nullable().optional(),
   imovelId: z.string().uuid().nullable().optional(),
 });
 
-// Fase 5: mudança de coluna no Kanban
 export const atualizarStatusSchema = z.object({
   status: leadStatusEnum,
 });
 
-// Fase 5: alteração rápida da temperatura do lead (sem abrir o cadastro completo)
 export const atualizarTemperaturaSchema = z.object({
   temperatura: leadTemperaturaEnum,
 });
 
-// Fase 5: transferência de lead entre corretores (só gestor/admin)
 export const atribuirCorretorSchema = z.object({
   corretorId: z.string().uuid(),
 });
@@ -73,8 +67,8 @@ export const listarLeadsQuerySchema = z.object({
   corretorId: z.string().uuid().optional(),
   campanhaId: z.string().uuid().optional(),
   origem: leadOrigemEnum.optional(),
-  temperatura: leadTemperaturaEnum.optional(), // suporta os filtros rápidos "Apenas Quentes"/"Apenas Mornos"
-  busca: z.string().optional(), // busca livre por nome/telefone (tela "Meus Leads")
+  temperatura: leadTemperaturaEnum.optional(),
+  busca: z.string().optional(),
   page: z.coerce.number().min(1).default(1),
   pageSize: z.coerce.number().min(1).max(100).default(20),
 });
