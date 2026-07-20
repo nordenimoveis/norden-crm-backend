@@ -24,11 +24,6 @@ export class LeadsService {
     this.roundRobinService = new RoundRobinService(prisma);
   }
 
-  /**
-   * Fluxo "ativo": round-robin + início imediato da cadência. Usado pelos
-   * dois pontos de entrada de lead NOVO (Meta Ads e o webhook do Imobzi) —
-   * a lógica de negócio é idêntica, só muda de onde o dado chega.
-   */
   private async criarLeadEIniciarFluxoAtivo(dados: {
     nome?: string;
     telefone: string;
@@ -62,7 +57,6 @@ export class LeadsService {
     return lead;
   }
 
-  /** Entrada 1: lead do Meta Ads/Instagram (via meta-ads.service). */
   async criar(input: CriarLeadInput) {
     const existente = await this.prisma.lead.findFirst({
       where: { telefone: input.telefone, campanhaId: input.campanhaId ?? null },
@@ -81,12 +75,6 @@ export class LeadsService {
     });
   }
 
-  /**
-   * Entrada 2 (Imobzi — Rota "Ativa"): novo lead do site, que hoje cai
-   * primeiro no Imobzi. Quando o Imobzi nos avisa via webhook, o lead
-   * PRECISA passar pelo round-robin e disparar o Passo 1 imediatamente —
-   * mesma regra de negócio do Meta Ads, só muda a origem e o identificador.
-   */
   async criarDeImobziWebhook(input: ImobziWebhookLeadInput) {
     const existente = await this.prisma.lead.findUnique({ where: { imobziId: input.imobzi_id } });
     if (existente) return existente;
@@ -101,11 +89,6 @@ export class LeadsService {
     });
   }
 
-  /**
-   * Entrada 3 (Imobzi — Rota "Passiva"): importação em lote da base antiga.
-   * REGRA CRÍTICA DE NEGÓCIO: estes leads NUNCA passam pelo round-robin
-   * e NUNCA disparam a cadência do WhatsApp.
-   */
   async importarLeadLegado(input: ImobziLeadLegadoInput) {
     const existente = await this.prisma.lead.findUnique({ where: { imobziId: input.id } });
     if (existente) return { lead: existente, criado: false };
@@ -177,7 +160,14 @@ export class LeadsService {
     return lead;
   }
 
-  async atualizar(id: string, input: AtualizarLeadInput) {
+  async atualizar(id: string, input: AtualizarLeadInput, usuario: UsuarioAutenticado) {
+    const lead = await this.prisma.lead.findUnique({ where: { id } });
+    if (!lead) throw new Error('LEAD_NAO_ENCONTRADO');
+
+    if (usuario.papel === 'corretor' && lead.corretorId !== usuario.sub) {
+      throw new Error('SEM_PERMISSAO');
+    }
+
     return this.prisma.lead.update({ where: { id }, data: input });
   }
 
