@@ -13,9 +13,14 @@ const MENSAGENS_ERRO: Record<string, { status: number; message: string }> = {
     status: 400,
     message: 'Esse template ainda não foi aprovado pela Meta — não pode ser usado em disparo em massa',
   },
+  TEMPLATE_SEM_NOME_META: {
+    status: 400,
+    message: 'O template precisa ter o "Nome do template na Meta" preenchido para poder ser enviado de verdade',
+  },
   PUBLICO_VAZIO: { status: 400, message: 'Nenhum lead encontrado com esse filtro' },
   CAMPANHA_NAO_ENCONTRADA: { status: 404, message: 'Campanha não encontrada' },
   CAMPANHA_NAO_EDITAVEL: { status: 400, message: 'Só é possível editar/apagar campanhas em rascunho' },
+  CAMPANHA_NAO_ESTA_PRONTA: { status: 400, message: 'A campanha precisa estar "pronta para envio" antes de iniciar o disparo' },
 };
 
 function tratarErro(err: unknown, reply: import('fastify').FastifyReply) {
@@ -78,6 +83,17 @@ export async function campanhasDisparoRoutes(app: FastifyInstance) {
 
       try {
         const campanha = await service.marcarComoPronta(id);
+        return reply.send(campanha);
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
+    });
+
+    protectedRoutes.post('/api/campanhas-disparo/:id/iniciar-envio', async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      try {
+        const campanha = await service.iniciarEnvio(id);
         return reply.send(campanha);
       } catch (err) {
         return tratarErro(err, reply);
