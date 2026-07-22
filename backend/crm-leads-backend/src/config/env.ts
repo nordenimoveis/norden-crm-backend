@@ -43,4 +43,13 @@ const envSchema = z.object({
   // variável, o CORS aceita qualquer origem (razoável em desenvolvimento,
   // não recomendado depois que o domínio da Vercel estiver definido).
   FRONTEND_URL: z.string().url().optional(),
+  const parsed = envSchema.safeParse(process.env);
+
+if (!parsed.success) {
+  // eslint-disable-next-line no-console
+  console.error('❌ Variáveis de ambiente inválidas:', parsed.error.flatten().fieldErrors);
+  process.exit(1);
+}
+
+export const env = parsed.data;
 });
