@@ -45,8 +45,5 @@ export function buildApp() {
   app.register(templatesMensagemRoutes);
   app.register(sistemaRoutes);
 
-  // TEMPORÁRIO — só para diagnosticar o problema das rotas sumidas. Remover depois.
-  app.get('/debug-routes', async () => app.printRoutes());
-
   return app;
 }
