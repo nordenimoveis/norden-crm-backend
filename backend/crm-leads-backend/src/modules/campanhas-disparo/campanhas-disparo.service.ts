@@ -146,4 +146,14 @@ export class CampanhasDisparoService {
       destinatarios.map((d) => d.id)
     );
 
-    return
+    return this.buscarPorId(id);
+  }
+
+  async deletar(id: string) {
+    const campanha = await this.prisma.campanhaDisparo.findUnique({ where: { id } });
+    if (!campanha) throw new Error('CAMPANHA_NAO_ENCONTRADA');
+    if (campanha.status !== 'rascunho') throw new Error('CAMPANHA_NAO_EDITAVEL');
+
+    await this.prisma.campanhaDisparo.delete({ where: { id } });
+  }
+}
