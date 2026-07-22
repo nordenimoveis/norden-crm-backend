@@ -22,12 +22,13 @@ enum LeadStatus {
   negocio_fechado  // Negócio Fechado
   perdido
   frio_standby     // Passo 4 da cadência concluído sem resposta
-}
 
+}
 enum LeadOrigem {
   meta_ads
   site_imobzi    // lead do formulário do site, que hoje cai primeiro no Imobzi (gateway)
   legado_imobzi  // importado da base antiga do Imobzi — nunca entra em roleta/cadência
+  importacao_planilha // importado por planilha (Excel/CSV) — nunca entra em roleta/cadência automaticamente
 }
 
 enum LeadTemperatura {
