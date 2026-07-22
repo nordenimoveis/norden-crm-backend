@@ -139,6 +139,7 @@ model CampanhaDisparoLead {
   lead              Lead     @relation(fields: [leadId], references: [id])
 
   status    String    @default("pendente")
+  erro      String?
   enviadoEm DateTime? @map("enviado_em")
 
   @@unique([campanhaDisparoId, leadId])
