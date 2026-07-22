@@ -13,6 +13,8 @@ import { realtimeRoutes } from '@/modules/realtime/realtime.routes';
 import { imobziRoutes } from '@/modules/imobzi/imobzi.routes';
 import { quickRepliesRoutes } from '@/modules/quick-replies/quick-replies.routes';
 import { importacaoRoutes } from '@/modules/importacao/importacao.routes';
+import { campanhasDisparoRoutes } from '@/modules/campanhas-disparo/campanhas-disparo.routes';
+import { templatesMensagemRoutes } from '@/modules/templates-mensagem/templates-mensagem.routes';
 import { sistemaRoutes } from '@/modules/sistema/sistema.routes';
 
 export function buildApp() {
@@ -24,7 +26,6 @@ export function buildApp() {
 
   app.register(sensible);
   app.register(cors, { origin: env.FRONTEND_URL ?? true });
-  // Upload de planilhas — limite de 10MB cobre bem milhares de linhas
   app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
 
   app.register(prismaPlugin);
@@ -40,6 +41,8 @@ export function buildApp() {
   app.register(imobziRoutes);
   app.register(quickRepliesRoutes, { prefix: '/api' });
   app.register(importacaoRoutes, { prefix: '/api' });
+  app.register(campanhasDisparoRoutes);
+  app.register(templatesMensagemRoutes);
   app.register(sistemaRoutes);
 
   return app;
