@@ -14,25 +14,25 @@ enum UserRole {
 }
 
 enum LeadStatus {
-  novo             // Novo Lead
-  respondeu        // Aguardando Resposta (transbordo humano da Fase 4)
-  em_atendimento   // Em Atendimento (corretor assumiu a conversa manualmente)
-  visita_agendada  // Visita Agendada
-  proposta         // Proposta
-  negocio_fechado  // Negócio Fechado
+  novo
+  respondeu
+  em_atendimento
+  visita_agendada
+  proposta
+  negocio_fechado
   perdido
-  frio_standby     // Passo 4 da cadência concluído sem resposta
-
+  frio_standby
 }
+
 enum LeadOrigem {
   meta_ads
-  site_imobzi    // lead do formulário do site, que hoje cai primeiro no Imobzi (gateway)
-  legado_imobzi  // importado da base antiga do Imobzi — nunca entra em roleta/cadência
-  importacao_planilha // importado por planilha (Excel/CSV) — nunca entra em roleta/cadência automaticamente
+  site_imobzi
+  legado_imobzi
+  importacao_planilha
 }
 
 enum LeadTemperatura {
-  nao_avaliado  // padrão para lead novo — o corretor só sabe a temperatura após o 1º contato
+  nao_avaliado
   frio
   morno
   quente
@@ -65,13 +65,14 @@ model Usuario {
   senhaHash    String   @map("senha_hash")
   papel        UserRole @default(corretor)
   ativo        Boolean  @default(true)
-  ordemRoleta  Int      @default(0) @map("ordem_roleta") // posição na fila do round-robin de distribuição de leads
+  ordemRoleta  Int      @default(0) @map("ordem_roleta")
   criadoEm     DateTime @default(now()) @map("criado_em")
   atualizadoEm DateTime @updatedAt @map("atualizado_em")
 
   leads             Lead[]       @relation("CorretorLeads")
   mensagensEnviadas Mensagem[]   @relation("MensagemEnviadaPor")
   quickReplies      QuickReply[] @relation("QuickReplyDoUsuario")
+  campanhasDisparoCriadas CampanhaDisparo[] @relation("CampanhaDisparoCriadaPor")
 
   @@map("usuarios")
 }
@@ -104,6 +105,46 @@ model Campanha {
   @@map("campanhas")
 }
 
+enum CampanhaDisparoStatus {
+  rascunho
+  pronta
+  enviando
+  concluida
+  cancelada
+}
+
+model CampanhaDisparo {
+  id                 String   @id @default(uuid())
+  nome               String
+  templateMensagemId String   @map("template_mensagem_id")
+  templateMensagem   TemplateMensagem @relation(fields: [templateMensagemId], references: [id])
+  status             CampanhaDisparoStatus @default(rascunho)
+
+  criadoPorUsuarioId String   @map("criado_por_usuario_id")
+  criadoPor          Usuario  @relation("CampanhaDisparoCriadaPor", fields: [criadoPorUsuarioId], references: [id])
+
+  criadoEm           DateTime @default(now()) @map("criado_em")
+  atualizadoEm       DateTime @updatedAt @map("atualizado_em")
+
+  destinatarios CampanhaDisparoLead[]
+
+  @@map("campanhas_disparo")
+}
+
+model CampanhaDisparoLead {
+  id                String   @id @default(uuid())
+  campanhaDisparoId String   @map("campanha_disparo_id")
+  campanhaDisparo   CampanhaDisparo @relation(fields: [campanhaDisparoId], references: [id], onDelete: Cascade)
+  leadId            String   @map("lead_id")
+  lead              Lead     @relation(fields: [leadId], references: [id])
+
+  status    String    @default("pendente")
+  enviadoEm DateTime? @map("enviado_em")
+
+  @@unique([campanhaDisparoId, leadId])
+  @@map("campanha_disparo_leads")
+}
+
 model Lead {
   id           String     @id @default(uuid())
   nome         String?
@@ -122,7 +163,7 @@ model Lead {
   status       LeadStatus @default(novo)
   origem       LeadOrigem @default(meta_ads)
   temperatura  LeadTemperatura @default(nao_avaliado)
-  imobziId     String?    @unique @map("imobzi_id") // evita duplicidade ao receber o mesmo lead do Imobzi mais de uma vez
+  imobziId     String?    @unique @map("imobzi_id")
   atendimentoHumano Boolean @default(false) @map("atendimento_humano")
   payloadBruto Json?      @map("payload_bruto")
 
@@ -131,6 +172,7 @@ model Lead {
 
   execucoesCadencia LeadCadenciaExecucao[]
   mensagens         Mensagem[]
+  destinatarioDeCampanhas CampanhaDisparoLead[]
 
   @@unique([telefone, campanhaId])
   @@index([status])
@@ -143,7 +185,7 @@ model Cadencia {
   id        String   @id @default(uuid())
   nome      String
   ativo     Boolean  @default(true)
-  padrao    Boolean  @default(false) // cadência aplicada automaticamente a todo novo lead
+  padrao    Boolean  @default(false)
   criadoEm  DateTime @default(now()) @map("criado_em")
 
   passos    CadenciaPasso[]
@@ -175,7 +217,7 @@ model LeadCadenciaExecucao {
   passoAtual        Int            @default(0) @map("passo_atual")
   status            ExecucaoStatus @default(ativa)
   proximoDisparoEm  DateTime?      @map("proximo_disparo_em")
-  proximoJobId      String?        @map("proximo_job_id") // ID do job no BullMQ/Redis — usado para cancelar o disparo agendado se o lead responder antes
+  proximoJobId      String?        @map("proximo_job_id")
   iniciadaEm        DateTime       @default(now()) @map("iniciada_em")
   atualizadaEm      DateTime       @updatedAt @map("atualizada_em")
 
@@ -193,22 +235,22 @@ model TemplateMensagem {
 
   passos    CadenciaPasso[]
   mensagens Mensagem[]
+  campanhasDisparo CampanhaDisparo[]
 
   @@map("templates_mensagem")
 }
 
 enum QuickReplyTipo {
-  global   // criado pelo Admin/Gestor, visível para toda a equipe
-  pessoal  // criado por um corretor, visível só para ele
+  global
+  pessoal
 }
 
 model QuickReply {
   id             String         @id @default(uuid())
-  titulo         String         // usado na busca rápida do popover (Next.js)
-  textoMensagem  String         @map("texto_mensagem") // suporta variáveis: {{lead_name}}, {{broker_name}}
+  titulo         String
+  textoMensagem  String         @map("texto_mensagem")
   tipo           QuickReplyTipo
 
-  // Dono do template — obrigatório quando tipo = 'pessoal', null quando 'global'.
   usuarioId      String?        @map("usuario_id")
   usuario        Usuario?       @relation("QuickReplyDoUsuario", fields: [usuarioId], references: [id])
 
@@ -232,9 +274,6 @@ model Mensagem {
   status             MensagemStatus  @default(pendente)
   whatsappMessageId  String?         @map("whatsapp_message_id")
 
-  // null = mensagem automática (cadência); preenchido = corretor que respondeu manualmente pelo chat.
-  // Importante no modelo de "Número Único": several corretores usam a mesma conexão de WhatsApp,
-  // então isso é o que permite saber quem disse o quê.
   enviadaPorUsuarioId String?  @map("enviada_por_usuario_id")
   enviadaPorUsuario   Usuario? @relation("MensagemEnviadaPor", fields: [enviadaPorUsuarioId], references: [id])
 
