@@ -29,6 +29,7 @@ enum LeadOrigem {
   site_imobzi
   legado_imobzi
   importacao_planilha
+  manual
 }
 
 enum LeadTemperatura {
