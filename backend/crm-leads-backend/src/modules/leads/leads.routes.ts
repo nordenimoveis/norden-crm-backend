@@ -22,9 +22,9 @@ export async function leadsRoutes(app: FastifyInstance) {
     return reply.send(resultado);
   });
 
-  app.get('/leads/visitas-agendadas', async (request, reply) => {
-    const visitas = await service.listarVisitasAgendadas(request.user);
-    return reply.send(visitas);
+  app.get('/leads/agendamentos', async (request, reply) => {
+    const agendamentos = await service.listarAgendamentos(request.user);
+    return reply.send(agendamentos);
   });
 
   app.get('/leads/:id', async (request, reply) => {
