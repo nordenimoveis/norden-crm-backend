@@ -48,6 +48,7 @@ export const atualizarLeadSchema = z.object({
   telefone: z.string().min(8, 'Telefone inválido').optional(),
   email: z.string().email().optional(),
   imovelId: z.string().uuid().nullable().optional(),
+  dataVisita: z.coerce.date().nullable().optional(),
 });
 
 export const atualizarStatusSchema = z.object({
