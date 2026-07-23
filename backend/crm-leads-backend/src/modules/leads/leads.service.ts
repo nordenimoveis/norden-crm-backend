@@ -1,6 +1,7 @@
 import { PrismaClient, Lead, Prisma } from '@prisma/client';
 import {
   CriarLeadInput,
+  CriarLeadManualInput,
   ImobziWebhookLeadInput,
   ImobziLeadLegadoInput,
   AtualizarLeadInput,
@@ -12,6 +13,7 @@ import {
 import { CadenciasService } from '@/modules/cadencias/cadencias.service';
 import { RoundRobinService } from '@/lib/round-robin';
 import { notificarLeadAtualizado } from '@/lib/pusher';
+import { normalizarTelefone } from '@/lib/normalizar-telefone';
 
 export type UsuarioAutenticado = { sub: string; papel: 'gestor' | 'corretor' | 'admin' };
 
@@ -107,8 +109,46 @@ export class LeadsService {
     return { lead, criado: true };
   }
 
-  // Status que já saíram do fluxo ativo de propósito — nunca geram alerta
-  // de estagnação (não faz sentido cobrar resposta de um lead perdido).
+  async criarManual(input: CriarLeadManualInput) {
+    const telefoneNormalizado = normalizarTelefone(input.telefone);
+    if (!telefoneNormalizado) throw new Error('TELEFONE_INVALIDO');
+
+    const existente = await this.prisma.lead.findFirst({ where: { telefone: telefoneNormalizado } });
+    if (existente) throw new Error('LEAD_JA_EXISTE');
+
+    let corretorId = input.corretorId;
+
+    if (corretorId) {
+      const corretor = await this.prisma.usuario.findUnique({ where: { id: corretorId } });
+      if (!corretor || corretor.papel !== 'corretor' || !corretor.ativo) {
+        throw new Error('CORRETOR_INVALIDO');
+      }
+    } else {
+      corretorId = await this.roundRobinService.proximoCorretor();
+    }
+
+    const lead = await this.prisma.lead.create({
+      data: {
+        nome: input.nome,
+        telefone: telefoneNormalizado,
+        email: input.email,
+        origem: 'manual',
+        status: 'novo',
+        corretorId,
+      },
+    });
+
+    await notificarLeadAtualizado({
+      id: lead.id,
+      status: lead.status,
+      atendimentoHumano: lead.atendimentoHumano,
+      corretorId: lead.corretorId,
+      temperatura: lead.temperatura,
+    });
+
+    return lead;
+  }
+
   private readonly STATUS_SEM_ALERTA = ['perdido', 'negocio_fechado', 'frio_standby'];
   private readonly LIMITE_AGUARDANDO_RESPOSTA_HORAS = 4;
   private readonly LIMITE_SEM_ATIVIDADE_HORAS = 72;
@@ -178,6 +218,23 @@ export class LeadsService {
     });
 
     return { items, total, page, pageSize };
+  }
+
+  async listarVisitasAgendadas(usuario: UsuarioAutenticado) {
+    const where: Prisma.LeadWhereInput = {
+      status: 'visita_agendada',
+      dataVisita: { not: null },
+    };
+
+    if (usuario.papel === 'corretor') {
+      where.corretorId = usuario.sub;
+    }
+
+    return this.prisma.lead.findMany({
+      where,
+      orderBy: { dataVisita: 'asc' },
+      include: { corretor: true, imovel: true },
+    });
   }
 
   async buscarPorId(id: string, usuario: UsuarioAutenticado) {
