@@ -21,6 +21,8 @@ export const leadOrigemEnum = z.enum([
 
 export const leadTemperaturaEnum = z.enum(['nao_avaliado', 'frio', 'morno', 'quente']);
 
+export const tipoAgendamentoEnum = z.enum(['visita', 'reuniao', 'ligacao', 'whatsapp', 'outro']);
+
 export const criarLeadSchema = z.object({
   nome: z.string().min(1).optional(),
   telefone: z.string().min(8, 'Telefone inválido'),
@@ -58,7 +60,8 @@ export const atualizarLeadSchema = z.object({
   telefone: z.string().min(8, 'Telefone inválido').optional(),
   email: z.string().email().optional(),
   imovelId: z.string().uuid().nullable().optional(),
-  dataVisita: z.coerce.date().nullable().optional(),
+  dataAgendamento: z.coerce.date().nullable().optional(),
+  tipoAgendamento: tipoAgendamentoEnum.nullable().optional(),
 });
 
 export const atualizarStatusSchema = z.object({
