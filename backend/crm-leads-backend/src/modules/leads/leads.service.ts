@@ -116,7 +116,7 @@ export class LeadsService {
     const existente = await this.prisma.lead.findFirst({ where: { telefone: telefoneNormalizado } });
     if (existente) throw new Error('LEAD_JA_EXISTE');
 
-    let corretorId = input.corretorId;
+    let corretorId: string | null | undefined = input.corretorId;
 
     if (corretorId) {
       const corretor = await this.prisma.usuario.findUnique({ where: { id: corretorId } });
