@@ -3,6 +3,7 @@ import { requireRole } from '@/plugins/auth';
 import { LeadsService } from './leads.service';
 import {
   criarLeadSchema,
+  criarLeadManualSchema,
   atualizarLeadSchema,
   atualizarStatusSchema,
   atribuirCorretorSchema,
@@ -19,6 +20,11 @@ export async function leadsRoutes(app: FastifyInstance) {
     const query = listarLeadsQuerySchema.parse(request.query);
     const resultado = await service.listar(query, request.user);
     return reply.send(resultado);
+  });
+
+  app.get('/leads/visitas-agendadas', async (request, reply) => {
+    const visitas = await service.listarVisitasAgendadas(request.user);
+    return reply.send(visitas);
   });
 
   app.get('/leads/:id', async (request, reply) => {
@@ -40,6 +46,27 @@ export async function leadsRoutes(app: FastifyInstance) {
     const body = criarLeadSchema.parse(request.body);
     const lead = await service.criar(body);
     return reply.code(201).send(lead);
+  });
+
+  app.post('/leads/manual', async (request, reply) => {
+    const body = criarLeadManualSchema.parse(request.body);
+
+    try {
+      const lead = await service.criarManual(body);
+      return reply.code(201).send(lead);
+    } catch (err) {
+      const mensagem = (err as Error).message;
+      if (mensagem === 'TELEFONE_INVALIDO') {
+        return reply.code(400).send({ message: 'Telefone inválido' });
+      }
+      if (mensagem === 'LEAD_JA_EXISTE') {
+        return reply.code(409).send({ message: 'Já existe um lead cadastrado com esse telefone' });
+      }
+      if (mensagem === 'CORRETOR_INVALIDO') {
+        return reply.code(400).send({ message: 'Corretor selecionado é inválido ou está inativo' });
+      }
+      throw err;
+    }
   });
 
   app.patch('/leads/:id', async (request, reply) => {
