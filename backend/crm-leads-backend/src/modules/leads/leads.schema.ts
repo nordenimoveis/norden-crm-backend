@@ -11,7 +11,13 @@ export const leadStatusEnum = z.enum([
   'frio_standby',
 ]);
 
-export const leadOrigemEnum = z.enum(['meta_ads', 'site_imobzi', 'legado_imobzi']);
+export const leadOrigemEnum = z.enum([
+  'meta_ads',
+  'site_imobzi',
+  'legado_imobzi',
+  'importacao_planilha',
+  'manual',
+]);
 
 export const leadTemperaturaEnum = z.enum(['nao_avaliado', 'frio', 'morno', 'quente']);
 
@@ -24,6 +30,13 @@ export const criarLeadSchema = z.object({
   origem: leadOrigemEnum.default('meta_ads'),
   imobziId: z.string().optional(),
   payloadBruto: z.record(z.any()).optional(),
+});
+
+export const criarLeadManualSchema = z.object({
+  nome: z.string().min(1, 'Informe o nome do lead'),
+  telefone: z.string().min(8, 'Telefone inválido'),
+  email: z.string().email().optional(),
+  corretorId: z.string().uuid().optional(),
 });
 
 export const imobziWebhookLeadSchema = z.object({
@@ -40,9 +53,6 @@ export const imobziLeadLegadoSchema = z.object({
   email: z.string().email().nullable().optional(),
 });
 
-// Edição de dados básicos do lead — status e corretorId NÃO entram aqui de
-// propósito: já existem rotas dedicadas (atualizarStatus/atribuirCorretor)
-// com verificação de RBAC própria.
 export const atualizarLeadSchema = z.object({
   nome: z.string().min(1).optional(),
   telefone: z.string().min(8, 'Telefone inválido').optional(),
@@ -75,6 +85,7 @@ export const listarLeadsQuerySchema = z.object({
 });
 
 export type CriarLeadInput = z.infer<typeof criarLeadSchema>;
+export type CriarLeadManualInput = z.infer<typeof criarLeadManualSchema>;
 export type ImobziWebhookLeadInput = z.infer<typeof imobziWebhookLeadSchema>;
 export type ImobziLeadLegadoInput = z.infer<typeof imobziLeadLegadoSchema>;
 export type AtualizarLeadInput = z.infer<typeof atualizarLeadSchema>;
