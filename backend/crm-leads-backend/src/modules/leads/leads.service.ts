@@ -220,10 +220,9 @@ export class LeadsService {
     return { items, total, page, pageSize };
   }
 
-  async listarVisitasAgendadas(usuario: UsuarioAutenticado) {
+  async listarAgendamentos(usuario: UsuarioAutenticado) {
     const where: Prisma.LeadWhereInput = {
-      status: 'visita_agendada',
-      dataVisita: { not: null },
+      dataAgendamento: { not: null },
     };
 
     if (usuario.papel === 'corretor') {
@@ -232,7 +231,7 @@ export class LeadsService {
 
     return this.prisma.lead.findMany({
       where,
-      orderBy: { dataVisita: 'asc' },
+      orderBy: { dataAgendamento: 'asc' },
       include: { corretor: true, imovel: true },
     });
   }
