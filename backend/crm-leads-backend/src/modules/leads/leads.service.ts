@@ -107,6 +107,35 @@ export class LeadsService {
     return { lead, criado: true };
   }
 
+  // Status que já saíram do fluxo ativo de propósito — nunca geram alerta
+  // de estagnação (não faz sentido cobrar resposta de um lead perdido).
+  private readonly STATUS_SEM_ALERTA = ['perdido', 'negocio_fechado', 'frio_standby'];
+  private readonly LIMITE_AGUARDANDO_RESPOSTA_HORAS = 4;
+  private readonly LIMITE_SEM_ATIVIDADE_HORAS = 72;
+
+  private calcularAlerta(
+    status: string,
+    ultimaMensagem: { direcao: string; criadoEm: Date } | null,
+    criadoEm: Date
+  ): { tipo: 'aguardando_resposta' | 'sem_atividade' | null; horasParado: number | null } {
+    if (this.STATUS_SEM_ALERTA.includes(status)) {
+      return { tipo: null, horasParado: null };
+    }
+
+    const referencia = ultimaMensagem?.criadoEm ?? criadoEm;
+    const horasParado = (Date.now() - referencia.getTime()) / (1000 * 60 * 60);
+
+    if (ultimaMensagem?.direcao === 'recebida' && horasParado >= this.LIMITE_AGUARDANDO_RESPOSTA_HORAS) {
+      return { tipo: 'aguardando_resposta', horasParado: Math.floor(horasParado) };
+    }
+
+    if (horasParado >= this.LIMITE_SEM_ATIVIDADE_HORAS) {
+      return { tipo: 'sem_atividade', horasParado: Math.floor(horasParado) };
+    }
+
+    return { tipo: null, horasParado: Math.floor(horasParado) };
+  }
+
   async listar(query: ListarLeadsQuery, usuario: UsuarioAutenticado) {
     const { page, pageSize, busca, ...filtros } = query;
 
@@ -126,16 +155,27 @@ export class LeadsService {
         : {}),
     };
 
-    const [items, total] = await Promise.all([
+    const [itemsBrutos, total] = await Promise.all([
       this.prisma.lead.findMany({
         where,
         orderBy: { criadoEm: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: { campanha: true, imovel: true, corretor: true },
+        include: {
+          campanha: true,
+          imovel: true,
+          corretor: true,
+          mensagens: { orderBy: { criadoEm: 'desc' }, take: 1 },
+        },
       }),
       this.prisma.lead.count({ where }),
     ]);
+
+    const items = itemsBrutos.map((lead) => {
+      const { mensagens, ...resto } = lead;
+      const alerta = this.calcularAlerta(lead.status, mensagens[0] ?? null, lead.criadoEm);
+      return { ...resto, alerta: alerta.tipo, horasParado: alerta.horasParado };
+    });
 
     return { items, total, page, pageSize };
   }
