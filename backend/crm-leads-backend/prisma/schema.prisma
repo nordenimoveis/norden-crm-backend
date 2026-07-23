@@ -39,6 +39,14 @@ enum LeadTemperatura {
   quente
 }
 
+enum TipoAgendamento {
+  visita
+  reuniao
+  ligacao
+  whatsapp
+  outro
+}
+
 enum ExecucaoStatus {
   ativa
   pausada
@@ -165,10 +173,11 @@ model Lead {
   status       LeadStatus @default(novo)
   origem       LeadOrigem @default(meta_ads)
   temperatura  LeadTemperatura @default(nao_avaliado)
-  imobziId     String?    @unique @map("imobzi_id") // evita duplicidade ao receber o mesmo lead do Imobzi mais de uma vez
+  imobziId     String?    @unique @map("imobzi_id")
   atendimentoHumano Boolean @default(false) @map("atendimento_humano")
   payloadBruto Json?      @map("payload_bruto")
-  dataVisita   DateTime?  @map("data_visita")
+  dataAgendamento DateTime? @map("data_agendamento")
+  tipoAgendamento TipoAgendamento? @map("tipo_agendamento")
 
   criadoEm     DateTime   @default(now()) @map("criado_em")
   atualizadoEm DateTime   @updatedAt @map("atualizado_em")
