@@ -12,9 +12,9 @@ export const atualizarQuickReplySchema = z.object({
   titulo: z.string().min(1).optional(),
   textoMensagem: z.string().min(1).optional(),
   ativo: z.boolean().optional(),
+  paraAvaliacaoGoogle: z.boolean().optional(),
 });
 
-// Busca rápida por título — usada pelo popover do "/" no Next.js
 export const buscarQuickReplyQuerySchema = z.object({
   busca: z.string().optional(),
 });
