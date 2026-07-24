@@ -259,14 +259,15 @@ enum QuickReplyTipo {
 
 model QuickReply {
   id             String         @id @default(uuid())
-  titulo         String
-  textoMensagem  String         @map("texto_mensagem")
+  titulo         String         // usado na busca rápida do popover (Next.js)
+  textoMensagem  String         @map("texto_mensagem") // suporta variáveis: {{lead_name}}, {{broker_name}}
   tipo           QuickReplyTipo
 
   usuarioId      String?        @map("usuario_id")
   usuario        Usuario?       @relation("QuickReplyDoUsuario", fields: [usuarioId], references: [id])
 
   ativo          Boolean        @default(true)
+  paraAvaliacaoGoogle Boolean   @default(false) @map("para_avaliacao_google")
   criadoEm       DateTime       @default(now()) @map("criado_em")
   atualizadoEm   DateTime       @updatedAt @map("atualizado_em")
 
