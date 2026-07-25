@@ -34,6 +34,13 @@ export class CampanhasDisparoService {
     if (!template.aprovadoMeta) throw new Error('TEMPLATE_NAO_APROVADO');
     if (!template.metaTemplateName) throw new Error('TEMPLATE_SEM_NOME_META');
 
+    if (template.midiaTipo && !input.midiaUrl) {
+      throw new Error('MIDIA_OBRIGATORIA');
+    }
+    if (!template.midiaTipo && input.midiaUrl) {
+      throw new Error('TEMPLATE_SEM_CABECALHO_MIDIA');
+    }
+
     const leadsAlvo = await this.prisma.lead.findMany({
       where: this.construirWhere(input.filtroPublico),
       select: { id: true },
@@ -45,6 +52,7 @@ export class CampanhasDisparoService {
       data: {
         nome: input.nome,
         templateMensagemId: input.templateMensagemId,
+        midiaUrl: input.midiaUrl,
         criadoPorUsuarioId: usuarioId,
         destinatarios: {
           create: leadsAlvo.map((lead) => ({ leadId: lead.id })),
@@ -53,7 +61,6 @@ export class CampanhasDisparoService {
       include: { templateMensagem: true, _count: { select: { destinatarios: true } } },
     });
   }
-
   async listar() {
     return this.prisma.campanhaDisparo.findMany({
       orderBy: { criadoEm: 'desc' },
