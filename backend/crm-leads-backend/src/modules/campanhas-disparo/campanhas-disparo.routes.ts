@@ -22,6 +22,18 @@ const MENSAGENS_ERRO: Record<string, { status: number; message: string }> = {
   CAMPANHA_NAO_ENCONTRADA: { status: 404, message: 'Campanha não encontrada' },
   CAMPANHA_NAO_EDITAVEL: { status: 400, message: 'Só é possível editar/apagar campanhas em rascunho' },
   CAMPANHA_NAO_ESTA_PRONTA: { status: 400, message: 'A campanha precisa estar "pronta para envio" antes de iniciar o disparo' },
+  MIDIA_OBRIGATORIA: {
+    status: 400,
+    message: 'Esse template tem cabeçalho de mídia — anexe uma imagem/vídeo/documento antes de criar a campanha',
+  },
+  TEMPLATE_SEM_CABECALHO_MIDIA: {
+    status: 400,
+    message: 'Esse template não tem cabeçalho de mídia configurado — não é possível anexar arquivo nele',
+  },
+  CLOUDINARY_NAO_CONFIGURADO: {
+    status: 503,
+    message: 'Upload de mídia não está configurado no servidor (faltam as credenciais do Cloudinary)',
+  },
 };
 
 function tratarErro(err: unknown, reply: import('fastify').FastifyReply) {
@@ -48,6 +60,24 @@ export async function campanhasDisparoRoutes(app: FastifyInstance) {
       const total = await service.contarPublico(filtro);
       return reply.send({ total });
     });
+
+    protectedRoutes.post('/api/campanhas-disparo/upload-midia', async (request, reply) => {
+      const arquivo = await request.file();
+
+      if (!arquivo) {
+        return reply.code(400).send({ message: 'Nenhum arquivo enviado' });
+      }
+
+      try {
+        const buffer = await arquivo.toBuffer();
+        const resultado = await uploadMidia(buffer, arquivo.mimetype);
+        return reply.send(resultado);
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
+    });
+
+    protectedRoutes.get('/api/campanhas-disparo/:id', async (request, reply) => {
 
     protectedRoutes.get('/api/campanhas-disparo/:id', async (request, reply) => {
       const { id } = request.params as { id: string };
