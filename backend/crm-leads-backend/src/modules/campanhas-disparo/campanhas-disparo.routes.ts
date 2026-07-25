@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireRole } from '@/plugins/auth';
 import { CampanhasDisparoService } from './campanhas-disparo.service';
+import { uploadMidia } from '@/lib/cloudinary';
 import {
   criarCampanhaDisparoSchema,
   atualizarCampanhaDisparoSchema,
