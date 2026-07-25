@@ -12,6 +12,7 @@ export const criarCampanhaDisparoSchema = z.object({
   nome: z.string().min(1, 'Dê um nome para a campanha'),
   templateMensagemId: z.string().uuid('Selecione um template aprovado'),
   filtroPublico: filtroPublicoSchema,
+  midiaUrl: z.string().url().optional(),
 });
 
 export const atualizarCampanhaDisparoSchema = z.object({
