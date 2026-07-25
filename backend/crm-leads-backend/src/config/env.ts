@@ -1,39 +1,50 @@
-import 'dotenv/config';
-import { z } from 'zod';
+import { v2 as cloudinary } from 'cloudinary';
+import { env } from '@/config/env';
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().default(3333),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL é obrigatória'),
-  REDIS_URL: z.string().min(1, 'REDIS_URL é obrigatória'),
-  JWT_SECRET: z.string().min(16, 'JWT_SECRET precisa ter pelo menos 16 caracteres'),
+let configurado = false;
 
-  IMOBZI_WEBHOOK_TOKEN: z.string().min(8, 'IMOBZI_WEBHOOK_TOKEN precisa ter pelo menos 8 caracteres'),
-  IMOBZI_API_BASE_URL: z.string().url().optional(),
-  IMOBZI_API_TOKEN: z.string().optional(),
+function garantirConfiguracao() {
+  if (configurado) return;
 
-  META_APP_SECRET: z.string().optional(),
-  META_VERIFY_TOKEN: z.string().optional(),
-  META_PAGE_ACCESS_TOKEN: z.string().optional(),
-  WHATSAPP_TOKEN: z.string().optional(),
-  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) {
+    throw new Error('CLOUDINARY_NAO_CONFIGURADO');
+  }
 
-  MAX_DAILY_MESSAGES: z.coerce.number().int().positive().default(100),
+  cloudinary.config({
+    cloud_name: env.CLOUDINARY_CLOUD_NAME,
+    api_key: env.CLOUDINARY_API_KEY,
+    api_secret: env.CLOUDINARY_API_SECRET,
+  });
 
-  PUSHER_APP_ID: z.string().min(1, 'PUSHER_APP_ID é obrigatória'),
-  PUSHER_KEY: z.string().min(1, 'PUSHER_KEY é obrigatória'),
-  PUSHER_SECRET: z.string().min(1, 'PUSHER_SECRET é obrigatória'),
-  PUSHER_CLUSTER: z.string().min(1, 'PUSHER_CLUSTER é obrigatória'),
-
-  FRONTEND_URL: z.string().url().optional(),
-});
-
-const parsed = envSchema.safeParse(process.env);
-
-if (!parsed.success) {
-  // eslint-disable-next-line no-console
-  console.error('❌ Variáveis de ambiente inválidas:', parsed.error.flatten().fieldErrors);
-  process.exit(1);
+  configurado = true;
 }
 
-export const env = parsed.data;
+export type ResultadoUpload = {
+  url: string;
+  tipo: 'image' | 'video' | 'document';
+};
+
+export async function uploadMidia(buffer: Buffer, mimeType: string): Promise<ResultadoUpload> {
+  garantirConfiguracao();
+
+  const tipo = inferirTipo(mimeType);
+
+  const resultado = await new Promise<{ secure_url: string }>((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { resource_type: 'auto', folder: 'norden-crm/campanhas' },
+      (erro, resultado) => {
+        if (erro || !resultado) return reject(erro ?? new Error('Falha no upload'));
+        resolve(resultado as { secure_url: string });
+      }
+    );
+    uploadStream.end(buffer);
+  });
+
+  return { url: resultado.secure_url, tipo };
+}
+
+function inferirTipo(mimeType: string): 'image' | 'video' | 'document' {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
+  return 'document';
+}
