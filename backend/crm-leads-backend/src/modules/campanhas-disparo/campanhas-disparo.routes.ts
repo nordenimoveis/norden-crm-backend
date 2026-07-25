@@ -26,3 +26,118 @@ const MENSAGENS_ERRO: Record<string, { status: number; message: string }> = {
     status: 400,
     message: 'Esse template tem cabeçalho de mídia — anexe uma imagem/vídeo/documento antes de criar a campanha',
   },
+  TEMPLATE_SEM_CABECALHO_MIDIA: {
+    status: 400,
+    message: 'Esse template não tem cabeçalho de mídia configurado — não é possível anexar arquivo nele',
+  },
+  CLOUDINARY_NAO_CONFIGURADO: {
+    status: 503,
+    message: 'Upload de mídia não está configurado no servidor (faltam as credenciais do Cloudinary)',
+  },
+};
+
+function tratarErro(err: unknown, reply: import('fastify').FastifyReply) {
+  const mensagem = (err as Error).message;
+  const erro = MENSAGENS_ERRO[mensagem];
+  if (erro) return reply.code(erro.status).send({ message: erro.message });
+  throw err;
+}
+
+export async function campanhasDisparoRoutes(app: FastifyInstance) {
+  const service = new CampanhasDisparoService(app.prisma);
+
+  app.register(async (protectedRoutes) => {
+    protectedRoutes.addHook('preHandler', app.authenticate);
+    protectedRoutes.addHook('preHandler', requireRole('gestor', 'admin'));
+
+    protectedRoutes.get('/api/campanhas-disparo', async (_request, reply) => {
+      const campanhas = await service.listar();
+      return reply.send(campanhas);
+    });
+
+    protectedRoutes.get('/api/campanhas-disparo/preview-publico', async (request, reply) => {
+      const filtro = filtroPublicoSchema.parse(request.query);
+      const total = await service.contarPublico(filtro);
+      return reply.send({ total });
+    });
+
+    protectedRoutes.post('/api/campanhas-disparo/upload-midia', async (request, reply) => {
+      const arquivo = await request.file();
+
+      if (!arquivo) {
+        return reply.code(400).send({ message: 'Nenhum arquivo enviado' });
+      }
+
+      try {
+        const buffer = await arquivo.toBuffer();
+        const resultado = await uploadMidia(buffer, arquivo.mimetype);
+        return reply.send(resultado);
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
+    });
+
+    protectedRoutes.get('/api/campanhas-disparo/:id', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const campanha = await service.buscarPorId(id);
+      if (!campanha) return reply.code(404).send({ message: 'Campanha não encontrada' });
+      return reply.send(campanha);
+    });
+
+    protectedRoutes.post('/api/campanhas-disparo', async (request, reply) => {
+      const body = criarCampanhaDisparoSchema.parse(request.body);
+
+      try {
+        const campanha = await service.criar(body, request.user.sub);
+        return reply.code(201).send(campanha);
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
+    });
+
+    protectedRoutes.patch('/api/campanhas-disparo/:id', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = atualizarCampanhaDisparoSchema.parse(request.body);
+
+      try {
+        const campanha = await service.atualizar(id, body);
+        return reply.send(campanha);
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
+    });
+
+    protectedRoutes.post('/api/campanhas-disparo/:id/marcar-pronta', async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      try {
+        const campanha = await service.marcarComoPronta(id);
+        return reply.send(campanha);
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
+    });
+
+    protectedRoutes.post('/api/campanhas-disparo/:id/iniciar-envio', async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      try {
+        const campanha = await service.iniciarEnvio(id);
+        return reply.send(campanha);
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
+    });
+
+    protectedRoutes.delete('/api/campanhas-disparo/:id', async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      try {
+        await service.deletar(id);
+        return reply.code(204).send();
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
+    });
+  });
+}
