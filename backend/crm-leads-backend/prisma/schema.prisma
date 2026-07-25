@@ -128,6 +128,7 @@ model CampanhaDisparo {
   templateMensagemId String   @map("template_mensagem_id")
   templateMensagem   TemplateMensagem @relation(fields: [templateMensagemId], references: [id])
   status             CampanhaDisparoStatus @default(rascunho)
+  midiaUrl           String?  @map("midia_url")
 
   criadoPorUsuarioId String   @map("criado_por_usuario_id")
   criadoPor          Usuario  @relation("CampanhaDisparoCriadaPor", fields: [criadoPorUsuarioId], references: [id])
@@ -237,12 +238,19 @@ model LeadCadenciaExecucao {
   @@map("lead_cadencia_execucao")
 }
 
+enum TipoMidiaTemplate {
+  image
+  video
+  document
+}
+
 model TemplateMensagem {
   id               String   @id @default(uuid())
   nome             String
   conteudo         String
   metaTemplateName String?  @map("meta_template_name")
   aprovadoMeta     Boolean  @default(false) @map("aprovado_meta")
+  midiaTipo        TipoMidiaTemplate? @map("midia_tipo")
   criadoEm         DateTime @default(now()) @map("criado_em")
 
   passos    CadenciaPasso[]
@@ -259,8 +267,8 @@ enum QuickReplyTipo {
 
 model QuickReply {
   id             String         @id @default(uuid())
-  titulo         String         // usado na busca rápida do popover (Next.js)
-  textoMensagem  String         @map("texto_mensagem") // suporta variáveis: {{lead_name}}, {{broker_name}}
+  titulo         String
+  textoMensagem  String         @map("texto_mensagem")
   tipo           QuickReplyTipo
 
   usuarioId      String?        @map("usuario_id")
