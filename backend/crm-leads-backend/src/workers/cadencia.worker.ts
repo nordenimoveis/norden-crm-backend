@@ -187,6 +187,8 @@ const campanhaWorker = new Worker<CampanhaJobPayload>(
             nomeTemplate: template.metaTemplateName,
             idioma: 'pt_BR',
             parametros: destinatario.lead.nome ? [destinatario.lead.nome] : undefined,
+            midiaUrl: destinatario.campanhaDisparo.midiaUrl ?? undefined,
+            midiaTipo: template.midiaTipo ?? undefined,
           },
           template.id
         );
