@@ -17,6 +17,7 @@ async function main() {
     },
   });
 
+  // Corretores de exemplo, na ordem em que entram na roleta do round-robin
   const corretor1 = await prisma.usuario.upsert({
     where: { email: 'corretor1@imobiliaria.com' },
     update: {},
@@ -41,6 +42,10 @@ async function main() {
     },
   });
 
+  // Templates com tom "Concierge": elegante, consultivo, sem pressão de vendas.
+  // O conteúdo abaixo é o texto de referência — o nome real aprovado no Meta
+  // (meta_template_name) precisa ser preenchido depois que o template passar
+  // pela aprovação da Meta Business Suite.
   const templateRecepcao = await prisma.templateMensagem.create({
     data: {
       nome: 'Passo 1 - Recepção Imediata',
@@ -96,6 +101,7 @@ async function main() {
     },
   });
 
+  // Quick Replies de exemplo — um global (visível pra todo mundo) e um pessoal
   await prisma.quickReply.create({
     data: {
       titulo: 'Agradecimento inicial',

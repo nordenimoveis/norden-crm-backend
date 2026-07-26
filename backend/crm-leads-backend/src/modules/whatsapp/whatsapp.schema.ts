@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+// Payload de webhook do WhatsApp Cloud API — cobre tanto mensagens recebidas
+// quanto atualizações de status (enviada/entregue/lida/falhou) de mensagens que nós enviamos.
+// Docs: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks
 export const whatsappWebhookPayloadSchema = z.object({
   object: z.literal('whatsapp_business_account'),
   entry: z.array(
@@ -16,7 +19,7 @@ export const whatsappWebhookPayloadSchema = z.object({
             messages: z
               .array(
                 z.object({
-                  from: z.string(),
+                  from: z.string(), // telefone do lead, sem "+"
                   id: z.string(),
                   timestamp: z.string(),
                   type: z.string(),
@@ -27,7 +30,7 @@ export const whatsappWebhookPayloadSchema = z.object({
             statuses: z
               .array(
                 z.object({
-                  id: z.string(),
+                  id: z.string(), // whatsapp_message_id da mensagem que enviamos
                   status: z.enum(['sent', 'delivered', 'read', 'failed']),
                   timestamp: z.string(),
                   recipient_id: z.string(),
@@ -55,6 +58,8 @@ export const enviarTemplateSchema = z.object({
   nomeTemplate: z.string().min(1),
   idioma: z.string().default('pt_BR'),
   parametros: z.array(z.string()).optional(),
+  // Cabeçalho de mídia — só usado quando o template aprovado na Meta tem um
+  // header do tipo IMAGE/VIDEO/DOCUMENT configurado.
   midiaUrl: z.string().url().optional(),
   midiaTipo: midiaTipoEnum.optional(),
 });

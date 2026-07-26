@@ -2,6 +2,13 @@ import { FastifyInstance } from 'fastify';
 import { requireRole } from '@/plugins/auth';
 import { criarTemplateMensagemSchema, atualizarTemplateMensagemSchema } from './templates-mensagem.schema';
 
+/**
+ * CRUD simples de templates de mensagem. A criação/aprovação de um template
+ * de verdade acontece no Meta Business Suite — esta tela só REGISTRA no
+ * nosso banco o que já foi aprovado lá (ou permite deixar um rascunho
+ * marcado como não aprovado, para organizar candidatos a template antes de
+ * submeter para aprovação).
+ */
 export async function templatesMensagemRoutes(app: FastifyInstance) {
   app.register(async (protectedRoutes) => {
     protectedRoutes.addHook('preHandler', app.authenticate);

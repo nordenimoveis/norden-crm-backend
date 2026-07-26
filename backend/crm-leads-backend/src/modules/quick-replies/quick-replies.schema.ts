@@ -15,6 +15,7 @@ export const atualizarQuickReplySchema = z.object({
   paraAvaliacaoGoogle: z.boolean().optional(),
 });
 
+// Busca rápida por título — usada pelo popover do "/" no Next.js
 export const buscarQuickReplyQuerySchema = z.object({
   busca: z.string().optional(),
 });

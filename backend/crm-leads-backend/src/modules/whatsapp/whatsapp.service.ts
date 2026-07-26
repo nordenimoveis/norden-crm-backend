@@ -63,6 +63,29 @@ export class WhatsappService {
    * caso `enviadaPorUsuarioId` fica de fora (null = mensagem automática).
    */
   async enviarTemplate(leadId: string, input: EnviarTemplateInput, templateId?: string) {
+    const componentes: Record<string, unknown>[] = [];
+
+    // Cabeçalho de mídia entra ANTES do corpo — é assim que a API do
+    // WhatsApp espera a ordem dos componentes.
+    if (input.midiaUrl && input.midiaTipo) {
+      componentes.push({
+        type: 'header',
+        parameters: [
+          {
+            type: input.midiaTipo,
+            [input.midiaTipo]: { link: input.midiaUrl },
+          },
+        ],
+      });
+    }
+
+    if (input.parametros) {
+      componentes.push({
+        type: 'body',
+        parameters: input.parametros.map((texto) => ({ type: 'text', text: texto })),
+      });
+    }
+
     const whatsappMessageId = await this.chamarApi({
       messaging_product: 'whatsapp',
       to: input.telefone,
@@ -70,20 +93,13 @@ export class WhatsappService {
       template: {
         name: input.nomeTemplate,
         language: { code: input.idioma },
-        components: input.parametros
-          ? [
-              {
-                type: 'body',
-                parameters: input.parametros.map((texto) => ({ type: 'text', text: texto })),
-              },
-            ]
-          : undefined,
+        components: componentes.length > 0 ? componentes : undefined,
       },
     });
 
     return this.registrarMensagemEnviada(
       leadId,
-      `[template: ${input.nomeTemplate}]`,
+      `[template: ${input.nomeTemplate}]${input.midiaUrl ? ' 📎' : ''}`,
       whatsappMessageId,
       templateId
     );
@@ -107,9 +123,11 @@ export class WhatsappService {
         whatsappMessageId,
         enviadaEm: new Date(),
       },
-      include: { enviadaPorUsuario: true },
+      include: { enviadaPorUsuario: true }, // pro chat já exibir "enviado por Ana" sem esperar refetch
     });
 
+    // Notifica o painel em tempo real (Pusher) — o chat aberto e o card no
+    // board são atualizados sem precisar de polling.
     await notificarNovaMensagem({
       id: mensagem.id,
       leadId: mensagem.leadId,
@@ -146,7 +164,8 @@ export class WhatsappService {
    * Gatilho de Interrupção Absoluta (Regra 3 da cadência):
    * destrói o job agendado no Redis, cancela a execução, marca o lead como
    * 'respondeu' + `atendimentoHumano = true`, e notifica o painel em tempo
-   * real (Pusher).
+   * real (Pusher) — é isso que faz o alerta "Aguardando Resposta" aparecer
+   * no card do Kanban instantaneamente, sem o corretor precisar dar refresh.
    */
   private async processarMensagemRecebida(telefoneOrigem: string, texto: string) {
     const lead = await this.prisma.lead.findFirst({ where: { telefone: telefoneOrigem } });
@@ -204,6 +223,8 @@ export class WhatsappService {
 
     const novoStatus = statusMap[status] ?? 'enviada';
 
+    // Busca antes de atualizar para conseguir o id/leadId e notificar o
+    // canal certo — updateMany não retorna os registros afetados.
     const mensagem = await this.prisma.mensagem.findFirst({ where: { whatsappMessageId } });
     if (!mensagem) return;
 

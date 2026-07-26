@@ -7,6 +7,11 @@ export async function importacaoRoutes(app: FastifyInstance) {
 
   app.addHook('preHandler', app.authenticate);
 
+  /**
+   * POST /api/contatos/importar — recebe um arquivo .xlsx ou .csv (multipart)
+   * e importa os contatos. Restrito a gestor/admin: importação em massa é uma
+   * operação sensível que altera a base de leads.
+   */
   app.post(
     '/contatos/importar',
     { preHandler: [requireRole('gestor', 'admin')] },
@@ -34,6 +39,10 @@ export async function importacaoRoutes(app: FastifyInstance) {
     }
   );
 
+  /**
+   * GET /api/contatos/exportar?origem=... — baixa uma planilha .xlsx com os
+   * contatos. `origem` é opcional (sem ela, exporta todos).
+   */
   app.get(
     '/contatos/exportar',
     { preHandler: [requireRole('gestor', 'admin')] },

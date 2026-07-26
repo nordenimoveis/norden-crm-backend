@@ -14,26 +14,26 @@ enum UserRole {
 }
 
 enum LeadStatus {
-  novo
-  respondeu
-  em_atendimento
-  visita_agendada
-  proposta
-  negocio_fechado
+  novo             // Novo Lead
+  respondeu        // Aguardando Resposta (transbordo humano da Fase 4)
+  em_atendimento   // Em Atendimento (corretor assumiu a conversa manualmente)
+  visita_agendada  // Visita Agendada
+  proposta         // Proposta
+  negocio_fechado  // Negócio Fechado
   perdido
-  frio_standby
+  frio_standby     // Passo 4 da cadência concluído sem resposta
 }
 
 enum LeadOrigem {
   meta_ads
-  site_imobzi
-  legado_imobzi
-  importacao_planilha
-  manual
+  site_imobzi    // lead do formulário do site, que hoje cai primeiro no Imobzi (gateway)
+  legado_imobzi  // importado da base antiga do Imobzi — nunca entra em roleta/cadência
+  importacao_planilha // importado por planilha (Excel/CSV) — nunca entra em roleta/cadência automaticamente
+  manual // cadastrado direto pela equipe (telefone, indicação, presencial) — nunca dispara cadência sozinho
 }
 
 enum LeadTemperatura {
-  nao_avaliado
+  nao_avaliado  // padrão para lead novo — o corretor só sabe a temperatura após o 1º contato
   frio
   morno
   quente
@@ -74,7 +74,7 @@ model Usuario {
   senhaHash    String   @map("senha_hash")
   papel        UserRole @default(corretor)
   ativo        Boolean  @default(true)
-  ordemRoleta  Int      @default(0) @map("ordem_roleta")
+  ordemRoleta  Int      @default(0) @map("ordem_roleta") // posição na fila do round-robin de distribuição de leads
   criadoEm     DateTime @default(now()) @map("criado_em")
   atualizadoEm DateTime @updatedAt @map("atualizado_em")
 
@@ -115,19 +115,32 @@ model Campanha {
 }
 
 enum CampanhaDisparoStatus {
-  rascunho
-  pronta
-  enviando
+  rascunho   // em edição, ainda não confirmada
+  pronta     // pronta para envio, aguardando o motor de disparo (Peça 4)
+  enviando   // motor de disparo em progresso
   concluida
   cancelada
 }
 
+/**
+ * Campanha de disparo em massa via WhatsApp (não confundir com `Campanha`,
+ * que rastreia a origem de leads do Meta Ads — nomes parecidos, conceitos
+ * diferentes). O público é "congelado" na criação via `CampanhaDisparoLead`
+ * — não recalcula sozinho se novos leads passarem a bater com o filtro
+ * depois, o que torna o envio previsível e auditável.
+ *
+ * `templateMensagemId` é obrigatório e deve apontar para um template
+ * aprovado pela Meta — texto livre não é permitido aqui de propósito: é a
+ * trava que impede o uso dessa ferramenta para disparo não solicitado.
+ */
 model CampanhaDisparo {
   id                 String   @id @default(uuid())
   nome               String
   templateMensagemId String   @map("template_mensagem_id")
   templateMensagem   TemplateMensagem @relation(fields: [templateMensagemId], references: [id])
   status             CampanhaDisparoStatus @default(rascunho)
+  // URL real (Cloudinary) da mídia anexada — só relevante se o template
+  // escolhido tiver templateMensagem.midiaTipo definido.
   midiaUrl           String?  @map("midia_url")
 
   criadoPorUsuarioId String   @map("criado_por_usuario_id")
@@ -148,8 +161,8 @@ model CampanhaDisparoLead {
   leadId            String   @map("lead_id")
   lead              Lead     @relation(fields: [leadId], references: [id])
 
-  status    String    @default("pendente")
-  erro      String?
+  status    String    @default("pendente") // pendente | enviado | falhou
+  erro      String?   // motivo da falha, quando status = falhou — útil pra diagnosticar sem vasculhar logs
   enviadoEm DateTime? @map("enviado_em")
 
   @@unique([campanhaDisparoId, leadId])
@@ -174,11 +187,17 @@ model Lead {
   status       LeadStatus @default(novo)
   origem       LeadOrigem @default(meta_ads)
   temperatura  LeadTemperatura @default(nao_avaliado)
-  imobziId     String?    @unique @map("imobzi_id")
+  imobziId     String?    @unique @map("imobzi_id") // evita duplicidade ao receber o mesmo lead do Imobzi mais de uma vez
   atendimentoHumano Boolean @default(false) @map("atendimento_humano")
   payloadBruto Json?      @map("payload_bruto")
-  dataAgendamento DateTime? @map("data_agendamento")
+  dataAgendamento DateTime? @map("data_agendamento") // quando é o compromisso — independente do status do Kanban
   tipoAgendamento TipoAgendamento? @map("tipo_agendamento")
+  notasInternas   String?   @map("notas_internas") // visível só pra equipe, nunca sai pro WhatsApp
+  // Quando QUALQUER pessoa da equipe abriu essa conversa pela última vez —
+  // é um "visto" de inbox compartilhado (não por usuário individual), do
+  // jeito que times de suporte costumam tratar isso: o que importa é se
+  // ALGUÉM da equipe já viu, não se cada corretor individualmente viu.
+  ultimaVisualizacaoEm DateTime? @map("ultima_visualizacao_em")
 
   criadoEm     DateTime   @default(now()) @map("criado_em")
   atualizadoEm DateTime   @updatedAt @map("atualizado_em")
@@ -198,7 +217,7 @@ model Cadencia {
   id        String   @id @default(uuid())
   nome      String
   ativo     Boolean  @default(true)
-  padrao    Boolean  @default(false)
+  padrao    Boolean  @default(false) // cadência aplicada automaticamente a todo novo lead
   criadoEm  DateTime @default(now()) @map("criado_em")
 
   passos    CadenciaPasso[]
@@ -230,7 +249,7 @@ model LeadCadenciaExecucao {
   passoAtual        Int            @default(0) @map("passo_atual")
   status            ExecucaoStatus @default(ativa)
   proximoDisparoEm  DateTime?      @map("proximo_disparo_em")
-  proximoJobId      String?        @map("proximo_job_id")
+  proximoJobId      String?        @map("proximo_job_id") // ID do job no BullMQ/Redis — usado para cancelar o disparo agendado se o lead responder antes
   iniciadaEm        DateTime       @default(now()) @map("iniciada_em")
   atualizadaEm      DateTime       @updatedAt @map("atualizada_em")
 
@@ -250,6 +269,9 @@ model TemplateMensagem {
   conteudo         String
   metaTemplateName String?  @map("meta_template_name")
   aprovadoMeta     Boolean  @default(false) @map("aprovado_meta")
+  // Descreve a ESTRUTURA do template aprovado na Meta: esse template tem um
+  // cabeçalho de mídia (imagem/vídeo/documento)? null = template só-texto.
+  // Isso é fixo por template — precisa bater com o que foi aprovado lá.
   midiaTipo        TipoMidiaTemplate? @map("midia_tipo")
   criadoEm         DateTime @default(now()) @map("criado_em")
 
@@ -261,20 +283,23 @@ model TemplateMensagem {
 }
 
 enum QuickReplyTipo {
-  global
-  pessoal
+  global   // criado pelo Admin/Gestor, visível para toda a equipe
+  pessoal  // criado por um corretor, visível só para ele
 }
 
 model QuickReply {
   id             String         @id @default(uuid())
-  titulo         String
-  textoMensagem  String         @map("texto_mensagem")
+  titulo         String         // usado na busca rápida do popover (Next.js)
+  textoMensagem  String         @map("texto_mensagem") // suporta variáveis: {{lead_name}}, {{broker_name}}
   tipo           QuickReplyTipo
 
+  // Dono do template — obrigatório quando tipo = 'pessoal', null quando 'global'.
   usuarioId      String?        @map("usuario_id")
   usuario        Usuario?       @relation("QuickReplyDoUsuario", fields: [usuarioId], references: [id])
 
   ativo          Boolean        @default(true)
+  // Marca ESTE quick reply como o modelo usado na sugestão automática de
+  // pedido de avaliação Google, quando um negócio é fechado no Kanban.
   paraAvaliacaoGoogle Boolean   @default(false) @map("para_avaliacao_google")
   criadoEm       DateTime       @default(now()) @map("criado_em")
   atualizadoEm   DateTime       @updatedAt @map("atualizado_em")
@@ -295,6 +320,9 @@ model Mensagem {
   status             MensagemStatus  @default(pendente)
   whatsappMessageId  String?         @map("whatsapp_message_id")
 
+  // null = mensagem automática (cadência); preenchido = corretor que respondeu manualmente pelo chat.
+  // Importante no modelo de "Número Único": several corretores usam a mesma conexão de WhatsApp,
+  // então isso é o que permite saber quem disse o quê.
   enviadaPorUsuarioId String?  @map("enviada_por_usuario_id")
   enviadaPorUsuario   Usuario? @relation("MensagemEnviadaPor", fields: [enviadaPorUsuarioId], references: [id])
 

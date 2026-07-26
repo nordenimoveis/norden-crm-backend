@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { leadOrigemEnum, leadStatusEnum, leadTemperaturaEnum } from '@/modules/leads/leads.schema';
 
+/**
+ * Filtro de público — os mesmos critérios já usados na tela "Meus Leads"
+ * (origem/status/temperatura/busca). Reaproveitar esse vocabulário evita
+ * inventar um segundo jeito de filtrar lead que o usuário precisaria
+ * aprender de novo.
+ */
 export const filtroPublicoSchema = z.object({
   origem: leadOrigemEnum.optional(),
   status: leadStatusEnum.optional(),

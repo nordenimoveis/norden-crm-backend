@@ -26,6 +26,11 @@ export class LeadsService {
     this.roundRobinService = new RoundRobinService(prisma);
   }
 
+  /**
+   * Fluxo "ativo": round-robin + início imediato da cadência. Usado pelos
+   * dois pontos de entrada de lead NOVO (Meta Ads e o webhook do Imobzi) —
+   * a lógica de negócio é idêntica, só muda de onde o dado chega.
+   */
   private async criarLeadEIniciarFluxoAtivo(dados: {
     nome?: string;
     telefone: string;
@@ -42,10 +47,17 @@ export class LeadsService {
       data: {
         ...dados,
         corretorId,
+        // Prisma tipa campos Json como Prisma.InputJsonValue, que não aceita
+        // diretamente um Record<string, unknown> genérico — cast explícito
+        // é a forma correta (não um "any" escondido: o valor real já é um
+        // objeto JSON serializável, só a tipagem do Prisma é mais estrita).
         payloadBruto: dados.payloadBruto as Prisma.InputJsonValue | undefined,
       },
     });
 
+    // Regra de negócio explícita (Fase 5 + Imobzi): todo lead que passa por
+    // aqui DEVE ser distribuído (já feito acima) e DEVE disparar o Passo 1
+    // imediatamente — diferente do fluxo passivo de importação da base antiga.
     await this.cadenciasService.iniciarCadenciaParaLead(lead.id);
 
     await notificarLeadAtualizado({
@@ -59,6 +71,7 @@ export class LeadsService {
     return lead;
   }
 
+  /** Entrada 1: lead do Meta Ads/Instagram (via meta-ads.service). */
   async criar(input: CriarLeadInput) {
     const existente = await this.prisma.lead.findFirst({
       where: { telefone: input.telefone, campanhaId: input.campanhaId ?? null },
@@ -77,6 +90,16 @@ export class LeadsService {
     });
   }
 
+  /**
+   * Entrada 2 (Imobzi — Rota "Ativa"): novo lead do site, que hoje cai
+   * primeiro no Imobzi. Quando o Imobzi nos avisa via webhook, o lead
+   * PRECISA passar pelo round-robin e disparar o Passo 1 imediatamente —
+   * mesma regra de negócio do Meta Ads, só muda a origem e o identificador.
+   *
+   * Deduplicação por `imobziId` (não por telefone): o Imobzi pode reenviar
+   * o mesmo ping mais de uma vez (retry de webhook é comum), e o `imobzi_id`
+   * é o identificador estável para evitar processar o mesmo lead duas vezes.
+   */
   async criarDeImobziWebhook(input: ImobziWebhookLeadInput) {
     const existente = await this.prisma.lead.findUnique({ where: { imobziId: input.imobzi_id } });
     if (existente) return existente;
@@ -91,6 +114,14 @@ export class LeadsService {
     });
   }
 
+  /**
+   * Entrada 3 (Imobzi — Rota "Passiva"): importação em lote da base antiga.
+   * REGRA CRÍTICA DE NEGÓCIO: estes leads NUNCA passam pelo round-robin
+   * (ficam sem corretor atribuído — ou podem ser distribuídos manualmente
+   * depois) e NUNCA disparam a cadência do WhatsApp, para não arriscar
+   * banimento do número com envios em massa para uma base antiga e fria.
+   * A tag "Base Antiga" é o próprio `origem = 'legado_imobzi'`.
+   */
   async importarLeadLegado(input: ImobziLeadLegadoInput) {
     const existente = await this.prisma.lead.findUnique({ where: { imobziId: input.id } });
     if (existente) return { lead: existente, criado: false };
@@ -103,12 +134,21 @@ export class LeadsService {
         origem: 'legado_imobzi',
         imobziId: input.id,
         status: 'novo',
+        // corretorId e execução de cadência propositalmente NÃO são criados aqui
       },
     });
 
     return { lead, criado: true };
   }
 
+  /**
+   * Cadastro manual pela equipe — telefone que ligou, indicação, contato
+   * presencial. Diferente do fluxo ativo (Meta Ads/site): NÃO dispara a
+   * cadência automática sozinho (decisão explícita de negócio — quem
+   * cadastra decide quando/como contatar). Se um `corretorId` for informado,
+   * usa ele; senão, cai no round-robin normal, pra manter a distribuição
+   * justa mesmo pra leads que entram por fora dos canais digitais.
+   */
   async criarManual(input: CriarLeadManualInput) {
     const telefoneNormalizado = normalizarTelefone(input.telefone);
     if (!telefoneNormalizado) throw new Error('TELEFONE_INVALIDO');
@@ -149,10 +189,17 @@ export class LeadsService {
     return lead;
   }
 
+  // Status que já saíram do fluxo ativo de propósito — nunca geram alerta
+  // de estagnação (não faz sentido cobrar resposta de um lead perdido).
   private readonly STATUS_SEM_ALERTA = ['perdido', 'negocio_fechado', 'frio_standby'];
   private readonly LIMITE_AGUARDANDO_RESPOSTA_HORAS = 4;
   private readonly LIMITE_SEM_ATIVIDADE_HORAS = 72;
 
+  /**
+   * Alerta de lead estagnado (inspirado na detecção de leads "esfriados" de
+   * ferramentas como a Lais, adaptado pro nosso modelo — aqui é um ALERTA
+   * pro corretor agir, não uma retomada automática por IA).
+   */
   private calcularAlerta(
     status: string,
     ultimaMensagem: { direcao: string; criadoEm: Date } | null,
@@ -183,6 +230,9 @@ export class LeadsService {
       filtros.corretorId = usuario.sub;
     }
 
+    // `busca` é livre (nome OU telefone), então precisa de um OR separado dos
+    // filtros de igualdade (status, origem, temperatura, corretorId...), que
+    // continuam se comportando como AND entre si.
     const where = {
       ...filtros,
       ...(busca
@@ -205,6 +255,8 @@ export class LeadsService {
           campanha: true,
           imovel: true,
           corretor: true,
+          // Só a última mensagem — o suficiente pra calcular o alerta de
+          // estagnação, sem trazer o histórico inteiro numa lista.
           mensagens: { orderBy: { criadoEm: 'desc' }, take: 1 },
         },
       }),
@@ -213,13 +265,34 @@ export class LeadsService {
 
     const items = itemsBrutos.map((lead) => {
       const { mensagens, ...resto } = lead;
-      const alerta = this.calcularAlerta(lead.status, mensagens[0] ?? null, lead.criadoEm);
-      return { ...resto, alerta: alerta.tipo, horasParado: alerta.horasParado };
+      const ultimaMensagem = mensagens[0] ?? null;
+      const alerta = this.calcularAlerta(lead.status, ultimaMensagem, lead.criadoEm);
+
+      // "Não lida" = a última mensagem foi do LEAD (não da equipe) e chegou
+      // depois da última vez que alguém da equipe abriu essa conversa.
+      const naoLida = Boolean(
+        ultimaMensagem?.direcao === 'recebida' &&
+          (!resto.ultimaVisualizacaoEm || ultimaMensagem.criadoEm > resto.ultimaVisualizacaoEm)
+      );
+
+      return {
+        ...resto,
+        alerta: alerta.tipo,
+        horasParado: alerta.horasParado,
+        naoLida,
+        ultimaMensagemEm: ultimaMensagem?.criadoEm ?? null,
+      };
     });
 
     return { items, total, page, pageSize };
   }
 
+  /**
+   * Lista os compromissos agendados (dataAgendamento definida), ordenados
+   * pela data mais próxima primeiro. DE PROPÓSITO não filtra por status do
+   * Kanban — um lead pode estar em qualquer coluna e ainda ter uma ligação/
+   * reunião/visita marcada; as duas coisas são independentes.
+   */
   async listarAgendamentos(usuario: UsuarioAutenticado) {
     const where: Prisma.LeadWhereInput = {
       dataAgendamento: { not: null },
@@ -253,9 +326,20 @@ export class LeadsService {
       throw new Error('SEM_PERMISSAO');
     }
 
+    // Abrir a conversa marca como "vista" pra equipe toda — próxima vez que
+    // alguém listar os leads, essa conversa não aparece mais como não lida.
+    // Não precisa bloquear a resposta por causa disso (fire-and-forget).
+    this.prisma.lead
+      .update({ where: { id }, data: { ultimaVisualizacaoEm: new Date() } })
+      .catch(() => {
+        // eslint-disable-next-line no-console
+        console.error(`Falha ao marcar lead ${id} como visualizado`);
+      });
+
     return lead;
   }
 
+  /** Edição de dados básicos (nome/telefone/email/imóvel). Corretor só edita os próprios leads. */
   async atualizar(id: string, input: AtualizarLeadInput, usuario: UsuarioAutenticado) {
     const lead = await this.prisma.lead.findUnique({ where: { id } });
     if (!lead) throw new Error('LEAD_NAO_ENCONTRADO');
@@ -294,6 +378,12 @@ export class LeadsService {
     return atualizado;
   }
 
+  /**
+   * Atualização RÁPIDA da temperatura (FRIO/MORNO/QUENTE) — pensada para o
+   * dropdown direto no card do Kanban ou no cabeçalho do chat, sem precisar
+   * abrir a ficha completa do lead. Mesma regra de dono que o resto: corretor
+   * só altera a temperatura dos próprios leads.
+   */
   async atualizarTemperatura(id: string, input: AtualizarTemperaturaInput, usuario: UsuarioAutenticado) {
     const lead = await this.prisma.lead.findUnique({ where: { id } });
     if (!lead) throw new Error('LEAD_NAO_ENCONTRADO');

@@ -7,6 +7,7 @@ export type ResultadoImportacao = {
   importados: number;
   duplicados: number;
   invalidos: number;
+  // Amostra das primeiras linhas com problema, para o usuário entender o que houve
   exemplosInvalidos: { linha: number; motivo: string }[];
 };
 
@@ -19,6 +20,12 @@ type LinhaPlanilha = {
 export class ImportacaoService {
   constructor(private prisma: PrismaClient) {}
 
+  /**
+   * Lê a planilha (Excel ou CSV — o SheetJS detecta pelo conteúdo do buffer),
+   * mapeia as colunas de forma tolerante (aceita variações de cabeçalho como
+   * "Nome", "nome", "Telefone", "Celular", "E-mail", etc.) e converte em linhas
+   * normalizadas.
+   */
   private parsearPlanilha(buffer: Buffer): LinhaPlanilha[] {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const primeiraAba = workbook.SheetNames[0];
@@ -28,6 +35,7 @@ export class ImportacaoService {
     const linhasBrutas = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
 
     return linhasBrutas.map((linha) => {
+      // Mapeamento tolerante de cabeçalhos — normaliza a chave e procura sinônimos
       const chaves = Object.keys(linha);
       const acharColuna = (sinonimos: string[]) => {
         const chave = chaves.find((k) =>
@@ -37,7 +45,7 @@ export class ImportacaoService {
               .trim()
               .toLowerCase()
               .normalize('NFD')
-              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/[\u0300-\u036f]/g, '') // remove acentos
           )
         );
         return chave ? String(linha[chave]).trim() : undefined;
@@ -51,6 +59,11 @@ export class ImportacaoService {
     });
   }
 
+  /**
+   * Importa contatos de uma planilha. Contatos entram com origem
+   * `importacao_planilha` e NUNCA disparam roleta/cadência (mesma regra da
+   * base legada do Imobzi) — ficam só disponíveis para campanhas futuras.
+   */
   async importarContatos(buffer: Buffer): Promise<ResultadoImportacao> {
     const linhas = this.parsearPlanilha(buffer);
 
@@ -62,11 +75,12 @@ export class ImportacaoService {
       exemplosInvalidos: [],
     };
 
+    // Telefones já vistos nesta planilha, para pegar duplicados internos
     const telefonesNestaPlanilha = new Set<string>();
 
     for (let i = 0; i < linhas.length; i++) {
       const linha = linhas[i];
-      const numeroLinha = i + 2;
+      const numeroLinha = i + 2; // +2: linha 1 é o cabeçalho, e humanos contam a partir de 1
 
       const telefoneNormalizado = normalizarTelefone(linha.telefone);
 
@@ -81,12 +95,14 @@ export class ImportacaoService {
         continue;
       }
 
+      // Duplicado dentro da própria planilha
       if (telefonesNestaPlanilha.has(telefoneNormalizado)) {
         resultado.duplicados++;
         continue;
       }
       telefonesNestaPlanilha.add(telefoneNormalizado);
 
+      // Duplicado no banco (contato já existe)
       const jaExiste = await this.prisma.lead.findFirst({
         where: { telefone: telefoneNormalizado },
       });
@@ -103,6 +119,7 @@ export class ImportacaoService {
           email: linha.email || undefined,
           origem: 'importacao_planilha',
           status: 'novo',
+          // Sem corretorId, sem cadência — igual à importação da base legada
         },
       });
 
@@ -112,6 +129,11 @@ export class ImportacaoService {
     return resultado;
   }
 
+  /**
+   * Exporta contatos para uma planilha Excel. Aceita um filtro opcional de
+   * origem (ex: exportar só os importados por planilha, ou só os do Meta Ads).
+   * Retorna o buffer do arquivo .xlsx pronto para download.
+   */
   async exportarContatos(filtroOrigem?: string): Promise<Buffer> {
     const leads = await this.prisma.lead.findMany({
       where: filtroOrigem ? { origem: filtroOrigem as never } : undefined,

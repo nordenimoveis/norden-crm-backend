@@ -57,6 +57,8 @@ export async function notificarNovaMensagem(mensagem: MensagemResumo) {
     pusher.trigger(CANAL_KANBAN, 'mensagem_no_board', {
       leadId: mensagem.leadId,
       preview: mensagem.conteudo.slice(0, 80),
+      direcao: mensagem.direcao,
+      criadoEm: mensagem.criadoEm,
     }),
   ]);
 }

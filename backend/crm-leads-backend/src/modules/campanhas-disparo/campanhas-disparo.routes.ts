@@ -48,6 +48,8 @@ export async function campanhasDisparoRoutes(app: FastifyInstance) {
 
   app.register(async (protectedRoutes) => {
     protectedRoutes.addHook('preHandler', app.authenticate);
+    // Disparo em massa é uma superfície sensível — mesma régua da Gestão de
+    // Equipe e do import/export de contatos: gestor/admin apenas.
     protectedRoutes.addHook('preHandler', requireRole('gestor', 'admin'));
 
     protectedRoutes.get('/api/campanhas-disparo', async (_request, reply) => {
@@ -61,6 +63,12 @@ export async function campanhasDisparoRoutes(app: FastifyInstance) {
       return reply.send({ total });
     });
 
+    /**
+     * POST /api/campanhas-disparo/upload-midia — recebe um arquivo (multipart)
+     * e devolve a URL do Cloudinary + o tipo detectado (image/video/document).
+     * Não fica associado a nenhuma campanha aqui — o front usa essa URL na
+     * criação da campanha em seguida.
+     */
     protectedRoutes.post('/api/campanhas-disparo/upload-midia', async (request, reply) => {
       const arquivo = await request.file();
 
