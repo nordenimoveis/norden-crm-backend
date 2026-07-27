@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Tokens de design — paleta "Norden".
+  Grafite quase-preto na sidebar, porcelana quente no conteúdo, latão como
+  único acento de destaque, verde-mar reservado só para o status "online"
+  do WhatsApp. Valores em HSL para funcionar com a convenção shadcn/ui.
+*/
+@layer base {
+  :root {
+    --background: 60 9% 98%;         /* #FAFAF8 porcelana quente */
+    --foreground: 220 13% 12%;       /* #1C1E22 texto principal */
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 13% 12%;
+
+    --muted: 48 10% 92%;
+    --muted-foreground: 220 6% 40%;
+
+    --border: 48 10% 88%;            /* #E5E3DD */
+
+    --primary: 220 13% 12%;
+    --primary-foreground: 60 9% 98%;
+
+    --accent: 32 34% 51%;            /* #B08D57 latão */
+    --accent-foreground: 60 9% 98%;
+
+    --online: 168 40% 29%;           /* #2F6F62 verde-mar */
+
+    --sidebar: 222 18% 10%;          /* #14161B grafite quase-preto */
+    --sidebar-foreground: 60 9% 92%;
+    --sidebar-muted: 220 10% 65%;
+    --sidebar-border: 222 14% 18%;
+
+    --ring: 32 34% 51%;              /* mesmo tom do acento, para o anel de foco */
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+}
