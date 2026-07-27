@@ -81,7 +81,10 @@ export const atualizarLeadSchema = z.object({
   // Data/hora + tipo do próximo compromisso — null explícito serve pra "desmarcar"
   dataAgendamento: z.coerce.date().nullable().optional(),
   tipoAgendamento: tipoAgendamentoEnum.nullable().optional(),
-  notasInternas: z.string().nullable().optional(),
+});
+
+export const criarNotaInternaSchema = z.object({
+  texto: z.string().min(1, 'A nota não pode ficar vazia'),
 });
 
 // Fase 5: mudança de coluna no Kanban
@@ -115,6 +118,7 @@ export type CriarLeadManualInput = z.infer<typeof criarLeadManualSchema>;
 export type ImobziWebhookLeadInput = z.infer<typeof imobziWebhookLeadSchema>;
 export type ImobziLeadLegadoInput = z.infer<typeof imobziLeadLegadoSchema>;
 export type AtualizarLeadInput = z.infer<typeof atualizarLeadSchema>;
+export type CriarNotaInternaInput = z.infer<typeof criarNotaInternaSchema>;
 export type AtualizarStatusInput = z.infer<typeof atualizarStatusSchema>;
 export type AtualizarTemperaturaInput = z.infer<typeof atualizarTemperaturaSchema>;
 export type AtribuirCorretorInput = z.infer<typeof atribuirCorretorSchema>;

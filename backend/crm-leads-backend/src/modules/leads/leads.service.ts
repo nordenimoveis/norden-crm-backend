@@ -339,6 +339,35 @@ export class LeadsService {
     return lead;
   }
 
+  /** Corretor só corretorId=si mesmo; gestor/admin qualquer lead. Reaproveitada pelas notas. */
+  private async verificarAcessoAoLead(leadId: string, usuario: UsuarioAutenticado) {
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead) throw new Error('LEAD_NAO_ENCONTRADO');
+    if (usuario.papel === 'corretor' && lead.corretorId !== usuario.sub) {
+      throw new Error('SEM_PERMISSAO');
+    }
+    return lead;
+  }
+
+  async listarNotas(leadId: string, usuario: UsuarioAutenticado) {
+    await this.verificarAcessoAoLead(leadId, usuario);
+
+    return this.prisma.notaInterna.findMany({
+      where: { leadId },
+      orderBy: { criadoEm: 'desc' },
+      include: { usuario: { select: { id: true, nome: true } } },
+    });
+  }
+
+  async criarNota(leadId: string, texto: string, usuario: UsuarioAutenticado) {
+    await this.verificarAcessoAoLead(leadId, usuario);
+
+    return this.prisma.notaInterna.create({
+      data: { leadId, texto, usuarioId: usuario.sub },
+      include: { usuario: { select: { id: true, nome: true } } },
+    });
+  }
+
   /** Edição de dados básicos (nome/telefone/email/imóvel). Corretor só edita os próprios leads. */
   async atualizar(id: string, input: AtualizarLeadInput, usuario: UsuarioAutenticado) {
     const lead = await this.prisma.lead.findUnique({ where: { id } });
