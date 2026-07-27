@@ -368,6 +368,21 @@ export class LeadsService {
     });
   }
 
+  /**
+   * Liga/desliga a IA pra esse lead específico. Sempre que um humano manda
+   * mensagem manual pelo chat, o status volta pra `pausada_humano`
+   * automaticamente (ver `whatsapp.service.ts`) — aqui é só a troca manual,
+   * feita explicitamente pela equipe.
+   */
+  async atualizarStatusIA(
+    leadId: string,
+    statusIA: 'inativa' | 'ativa' | 'pausada_humano',
+    usuario: UsuarioAutenticado
+  ) {
+    await this.verificarAcessoAoLead(leadId, usuario);
+    return this.prisma.lead.update({ where: { id: leadId }, data: { statusIA } });
+  }
+
   /** Edição de dados básicos (nome/telefone/email/imóvel). Corretor só edita os próprios leads. */
   async atualizar(id: string, input: AtualizarLeadInput, usuario: UsuarioAutenticado) {
     const lead = await this.prisma.lead.findUnique({ where: { id } });

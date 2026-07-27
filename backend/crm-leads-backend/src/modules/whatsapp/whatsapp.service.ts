@@ -3,11 +3,16 @@ import { env } from '@/config/env';
 import { cancelarJobAgendado } from '@/queues/cadencia.queue';
 import { notificarNovaMensagem, notificarLeadAtualizado, notificarStatusMensagem } from '@/lib/pusher';
 import { EnviarTextoInput, EnviarTemplateInput, WhatsappWebhookPayload } from './whatsapp.schema';
+import { IaService } from '@/modules/ia/ia.service';
 
 const GRAPH_API_VERSION = 'v19.0';
 
 export class WhatsappService {
-  constructor(private prisma: PrismaClient) {}
+  private iaService: IaService;
+
+  constructor(private prisma: PrismaClient) {
+    this.iaService = new IaService(prisma);
+  }
 
   private get baseUrl() {
     return `https://graph.facebook.com/${GRAPH_API_VERSION}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
@@ -48,6 +53,17 @@ export class WhatsappService {
       type: 'text',
       text: { body: input.texto },
     });
+
+    // Se foi um HUMANO que mandou essa mensagem (enviadaPorUsuarioId
+    // presente) e a IA estava ativa nesse lead, o humano acabou de assumir
+    // a conversa — pausa a IA automaticamente, pra ela não responder por
+    // cima do que a pessoa acabou de escrever.
+    if (enviadaPorUsuarioId) {
+      await this.prisma.lead.updateMany({
+        where: { id: leadId, statusIA: 'ativa' },
+        data: { statusIA: 'pausada_humano' },
+      });
+    }
 
     return this.registrarMensagemEnviada(
       leadId,
@@ -160,13 +176,6 @@ export class WhatsappService {
     }
   }
 
-  /**
-   * Gatilho de Interrupção Absoluta (Regra 3 da cadência):
-   * destrói o job agendado no Redis, cancela a execução, marca o lead como
-   * 'respondeu' + `atendimentoHumano = true`, e notifica o painel em tempo
-   * real (Pusher) — é isso que faz o alerta "Aguardando Resposta" aparecer
-   * no card do Kanban instantaneamente, sem o corretor precisar dar refresh.
-   */
   private async processarMensagemRecebida(telefoneOrigem: string, texto: string) {
     const lead = await this.prisma.lead.findFirst({ where: { telefone: telefoneOrigem } });
 
@@ -192,17 +201,58 @@ export class WhatsappService {
       data: { status: 'cancelada', proximoJobId: null },
     });
 
-    const leadAtualizado = await this.prisma.lead.update({
-      where: { id: lead.id },
-      data: { status: 'respondeu', atendimentoHumano: true },
-    });
-
     await notificarNovaMensagem({
       id: mensagem.id,
       leadId: mensagem.leadId,
       direcao: mensagem.direcao,
       conteudo: mensagem.conteudo,
       criadoEm: mensagem.criadoEm,
+    });
+
+    // --- Ramo da IA ---------------------------------------------------
+    // Se a IA está ativa pra esse lead, ela gera E MANDA a resposta
+    // sozinha (sem revisão humana — decisão explícita do negócio). Se
+    // falhar por qualquer motivo, cai pro comportamento padrão (marca
+    // como precisa de atendimento humano), pra nunca deixar o lead sem
+    // resposta nenhuma por causa de um erro técnico da IA.
+    if (lead.statusIA === 'ativa') {
+      try {
+        const respostaIA = await this.iaService.gerarRespostaParaLead(lead.id, texto);
+
+        if (respostaIA.trim()) {
+          await this.enviarTexto(lead.id, { telefone: lead.telefone, texto: respostaIA });
+        }
+
+        const leadAtualizado = await this.prisma.lead.update({
+          where: { id: lead.id },
+          data: { status: 'respondeu' },
+        });
+
+        await notificarLeadAtualizado({
+          id: leadAtualizado.id,
+          status: leadAtualizado.status,
+          atendimentoHumano: leadAtualizado.atendimentoHumano,
+          corretorId: leadAtualizado.corretorId,
+        });
+
+        return;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`[ia] Falha ao gerar/enviar resposta automática pro lead ${lead.id}:`, err);
+        // Cai pro fluxo padrão abaixo — marca como precisando de humano.
+      }
+    }
+
+    /**
+     * Gatilho de Interrupção Absoluta (Regra 3 da cadência):
+     * destrói o job agendado no Redis, cancela a execução, marca o lead como
+     * 'respondeu' + `atendimentoHumano = true`, e notifica o painel em tempo
+     * real (Pusher) — é isso que faz o alerta "Aguardando Resposta" aparecer
+     * no card do Kanban instantaneamente, sem o corretor precisar dar refresh.
+     */
+    const leadAtualizado = await this.prisma.lead.update({
+      where: { id: lead.id },
+      data: { status: 'respondeu', atendimentoHumano: true },
     });
 
     await notificarLeadAtualizado({

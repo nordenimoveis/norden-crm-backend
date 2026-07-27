@@ -29,6 +29,9 @@
     "bcrypt": "^5.1.1",
     "bullmq": "^5.12.0",
     "cloudinary": "^2.5.1",
+    "@anthropic-ai/sdk": "^0.32.1",
+    "pdf-parse": "^1.1.1",
+    "cheerio": "^1.0.0",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
     "ioredis": "^5.4.1",
@@ -41,6 +44,7 @@
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
     "@types/node": "^22.5.0",
+    "@types/pdf-parse": "^1.1.4",
     "eslint": "^9.9.1",
     "prisma": "^5.20.0",
     "tsx": "^4.19.0",

@@ -50,6 +50,11 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
+
+  // IA / RAG — opcionais: sem elas, o atendimento continua 100% humano,
+  // só a sugestão automática de resposta fica indisponível.
+  ANTHROPIC_API_KEY: z.string().optional(),
+  VOYAGE_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

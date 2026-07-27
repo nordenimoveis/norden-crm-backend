@@ -11,6 +11,7 @@ import {
   listarLeadsQuerySchema,
   criarNotaInternaSchema,
 } from './leads.schema';
+import { atualizarStatusIASchema } from '@/modules/ia/ia.schema';
 
 export async function leadsRoutes(app: FastifyInstance) {
   const service = new LeadsService(app.prisma);
@@ -64,6 +65,25 @@ export async function leadsRoutes(app: FastifyInstance) {
     try {
       const nota = await service.criarNota(id, body.texto, request.user);
       return reply.code(201).send(nota);
+    } catch (err) {
+      const mensagem = (err as Error).message;
+      if (mensagem === 'SEM_PERMISSAO') {
+        return reply.code(403).send({ message: 'Você não tem acesso a este lead' });
+      }
+      if (mensagem === 'LEAD_NAO_ENCONTRADO') {
+        return reply.code(404).send({ message: 'Lead não encontrado' });
+      }
+      throw err;
+    }
+  });
+
+  app.patch('/leads/:id/status-ia', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = atualizarStatusIASchema.parse(request.body);
+
+    try {
+      const lead = await service.atualizarStatusIA(id, body.statusIA, request.user);
+      return reply.send(lead);
     } catch (err) {
       const mensagem = (err as Error).message;
       if (mensagem === 'SEM_PERMISSAO') {

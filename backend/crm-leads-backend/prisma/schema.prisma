@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 enum UserRole {
@@ -197,6 +199,13 @@ model Lead {
   // ALGUÉM da equipe já viu, não se cada corretor individualmente viu.
   ultimaVisualizacaoEm DateTime? @map("ultima_visualizacao_em")
 
+  // IA / RAG — a IA nunca manda mensagem sozinha: ela gera um RASCUNHO
+  // (rascunhoIA) que fica pendente até o corretor revisar e enviar (ou
+  // descartar) manualmente pelo chat. `statusIA` controla se isso está
+  // ligado pra esse lead específico.
+  statusIA   StatusIA @default(inativa) @map("status_ia")
+  rascunhoIA String?  @map("rascunho_ia")
+
   criadoEm     DateTime   @default(now()) @map("criado_em")
   atualizadoEm DateTime   @updatedAt @map("atualizado_em")
 
@@ -324,6 +333,51 @@ model NotaInterna {
   @@index([leadId, criadoEm])
   @@map("notas_internas")
 }
+
+// --- IA / RAG ---------------------------------------------------------
+// Base de conhecimento pro atendimento com IA: documentos (PDFs/URLs)
+// quebrados em pedaços (chunks) com embedding vetorial, buscados por
+// similaridade semântica (pgvector) na hora de gerar uma resposta.
+
+enum OrigemDocumento {
+  pdf
+  url
+}
+
+model Documento {
+  id        String          @id @default(uuid())
+  titulo    String
+  origem    OrigemDocumento
+  urlOrigem String?         @map("url_origem") // caminho do PDF ou a URL, conforme `origem`
+  criadoEm  DateTime        @default(now()) @map("criado_em")
+
+  chunks DocumentoChunk[]
+
+  @@map("documentos")
+}
+
+model DocumentoChunk {
+  id          String    @id @default(uuid())
+  documentoId String    @map("documento_id")
+  documento   Documento @relation(fields: [documentoId], references: [id], onDelete: Cascade)
+  conteudo    String
+  // Vetor de embedding (Voyage AI, modelo voyage-3 = 1024 dimensões).
+  // Prisma não tem tipo nativo pra `vector` — fica marcado como
+  // Unsupported, e todo acesso (insert/busca) passa por SQL puro
+  // ($queryRaw/$executeRaw) no service, não pelo Prisma Client normal.
+  embedding   Unsupported("vector(1024)")?
+  criadoEm    DateTime  @default(now()) @map("criado_em")
+
+  @@map("documento_chunks")
+}
+
+enum StatusIA {
+  inativa         // padrão — atendimento sempre humano, IA nunca entra
+  ativa           // IA gera sugestão de resposta a cada mensagem do lead
+  pausada_humano  // foi desligada manualmente pro corretor assumir sem sugestão
+}
+
+// --- fim IA / RAG -------------------------------------------------------
 
 model Mensagem {
   id                 String          @id @default(uuid())
