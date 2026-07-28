@@ -493,4 +493,42 @@ export class LeadsService {
 
     return atualizado;
   }
+
+  /**
+   * Usado pela sincronização em lote com o Imobzi (diferente do webhook em
+   * tempo real): se o lead já existe (mesmo imobziId), atualiza SÓ nome/
+   * telefone/email — nunca mexe em score, perfil de busca, notas internas,
+   * status do Kanban ou corretor responsável. Se não existe, cria como
+   * importação passiva (mesma regra do importarLeadLegado — sem roleta,
+   * sem cadência automática).
+   */
+  async sincronizarContatoImobzi(input: {
+    id: string;
+    nome?: string;
+    telefone: string;
+    email?: string;
+  }): Promise<{ criado: boolean }> {
+    const existente = await this.prisma.lead.findUnique({ where: { imobziId: input.id } });
+
+    if (existente) {
+      await this.prisma.lead.update({
+        where: { id: existente.id },
+        data: {
+          nome: input.nome ?? existente.nome,
+          telefone: input.telefone,
+          email: input.email ?? existente.email,
+        },
+      });
+      return { criado: false };
+    }
+
+    await this.importarLeadLegado({
+      id: input.id,
+      name: input.nome ?? null,
+      phone: input.telefone,
+      email: input.email ?? null,
+    });
+
+    return { criado: true };
+  }
 }
