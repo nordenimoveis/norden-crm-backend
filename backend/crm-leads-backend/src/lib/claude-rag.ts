@@ -119,6 +119,15 @@ Nunca mencione que você é uma IA, um modelo de linguagem, ou o nome "Claude" �
 CONTEXTO RECUPERADO DA BASE DE CONHECIMENTO:
 ${contextoFormatado}`;
 
+  const mensagemUsuario = `${historicoFormatado ? `Histórico recente da conversa:\n${historicoFormatado}\n\n` : ''}Mensagem atual do cliente${params.nomeDoLead ? ` (${params.nomeDoLead})` : ''}: ${params.perguntaDoLead}`;
+
+  const resposta = await anthropic.messages.create({
+    model: MODELO,
+    max_tokens: 500,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: mensagemUsuario }],
+  });
+
   const bloco = resposta.content.find((b) => b.type === 'text');
   return bloco && bloco.type === 'text' ? bloco.text : '';
 }
