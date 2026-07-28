@@ -121,9 +121,9 @@ export class IaService {
     const embeddingPergunta = await gerarEmbeddingUnico(pergunta, 'query');
     const vetorLiteral = `[${embeddingPergunta.join(',')}]`;
 
-    return this.prisma.$queryRawUnsafe
-      { conteudo: string; tituloDocumento: string; distancia: number }[]
-    >(
+    type LinhaFonte = { conteudo: string; tituloDocumento: string; distancia: number };
+
+    return this.prisma.$queryRawUnsafe<LinhaFonte[]>(
       `SELECT dc.conteudo, d.titulo AS "tituloDocumento", dc.embedding <=> $1::vector AS distancia
        FROM documento_chunks dc
        JOIN documentos d ON d.id = dc.documento_id
