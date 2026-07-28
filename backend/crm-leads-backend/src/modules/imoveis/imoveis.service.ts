@@ -2,6 +2,11 @@ import { PrismaClient } from '@prisma/client';
 import { gerarEmbeddingUnico } from '@/lib/embeddings';
 import { extrairTextoDePdf, extrairTextoDeUrl } from '@/lib/extracao-texto';
 import { extrairDadosImovel, DadosImovelExtraidos } from '@/lib/claude-rag';
+import {
+  buscarTodosImoveisImobzi,
+  statusIndicaIndisponivel,
+  ImobziImovelRaw,
+} from '@/lib/imobzi-imoveis-api';
 import { CriarImovelInput, AtualizarImovelInput } from './imoveis.schema';
 
 export class ImoveisService {
@@ -27,12 +32,6 @@ export class ImoveisService {
       .join('. ');
   }
 
-  /**
-   * Recalcula o embedding do imóvel a partir dos campos que descrevem ele
-   * (título, bairro, quartos, descrição). Chamada depois de criar/editar —
-   * se a Voyage não estiver configurada, não quebra o cadastro, só deixa
-   * esse imóvel de fora do match até a chave ser configurada.
-   */
   private async reindexar(imovelId: string, dados: Parameters<typeof this.textoParaEmbedding>[0]) {
     try {
       const texto = this.textoParaEmbedding(dados);
@@ -70,10 +69,6 @@ export class ImoveisService {
   async atualizar(id: string, input: AtualizarImovelInput) {
     const imovel = await this.prisma.imovel.update({ where: { id }, data: input });
 
-    // Só reindexar se algum campo que entra no texto do embedding mudou —
-    // evita chamada desnecessária à Voyage quando só o `ativo` ou o preço
-    // (que não entra no texto) foi alterado. Simplificação razoável: sempre
-    // que qualquer um dos campos relevantes vier no input, reindexar.
     if (
       input.titulo !== undefined ||
       input.bairro !== undefined ||
@@ -92,11 +87,6 @@ export class ImoveisService {
     await this.prisma.imovel.delete({ where: { id } });
   }
 
-  /**
-   * Lê um PDF/URL de anúncio e devolve os campos já extraídos pela IA —
-   * NÃO salva sozinho no catálogo. O front usa isso pra pré-preencher o
-   * formulário de cadastro, e o corretor revisa/ajusta antes de confirmar.
-   */
   async extrairDadosDeDocumento(params: {
     origem: 'pdf' | 'url';
     bufferPdf?: Buffer;
@@ -114,8 +104,81 @@ export class ImoveisService {
     return extrairDadosImovel(texto);
   }
 
-  /** Registra que um LEAD específico visualizou um imóvel — soma score e vira histórico de interesse. */
   async registrarVisualizacao(leadId: string, imovelId: string) {
     await this.prisma.imovelVisualizacao.create({ data: { leadId, imovelId } });
+  }
+
+  // ---------------------------------------------------------------------
+  // Integração Imobzi -> Norden CRM (unidirecional)
+  // ---------------------------------------------------------------------
+
+  /**
+   * Monta a "string rica" descritiva usada como texto-fonte do embedding —
+   * é isso que faz o motor de busca semântica conseguir responder sobre
+   * imóveis vindos do Imobzi com a mesma qualidade dos cadastrados manualmente.
+   */
+  private montarDescricaoRica(bruto: ImobziImovelRaw): string {
+    const caracteristicas = [
+      `Apartamento localizado no bairro ${bruto.bairro ?? 'não informado'}`,
+      bruto.metragem ? `com ${bruto.metragem} metros quadrados` : null,
+      bruto.quartos ? `${bruto.quartos} quartos` : null,
+      bruto.suites ? `sendo ${bruto.suites} suítes` : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    const valorTexto = bruto.valor
+      ? `Valor de venda: R$ ${bruto.valor.toLocaleString('pt-BR')}.`
+      : '';
+    const diferenciais = bruto.descricao ? `Diferenciais: ${bruto.descricao}` : '';
+
+    return [`${caracteristicas}.`, valorTexto, diferenciais].filter(Boolean).join(' ');
+  }
+
+  /**
+   * Sincronização unidirecional: Imobzi é a fonte da verdade, nosso
+   * catálogo é o espelho. Upsert por `imobziId` — se já existe, atualiza;
+   * se não existe, cria. Imóveis marcados como vendido/inativo no Imobzi
+   * são desativados aqui (não excluídos — o histórico de match continua
+   * íntegro), e o motor de match já ignora tudo que `ativo = false`.
+   */
+  async sincronizarComImobzi() {
+    const imoveisRemotos = await buscarTodosImoveisImobzi();
+
+    let novos = 0;
+    let atualizados = 0;
+
+    for (const bruto of imoveisRemotos) {
+      const indisponivel = statusIndicaIndisponivel(bruto.status);
+      const descricaoRica = this.montarDescricaoRica(bruto);
+
+      const dados = {
+        titulo: bruto.titulo || `Imóvel ${bruto.id}`,
+        bairro: bruto.bairro,
+        cidade: bruto.cidade || 'Florianópolis',
+        valor: bruto.valor,
+        metragem: bruto.metragem,
+        quartos: bruto.quartos,
+        descricao: descricaoRica,
+        fotoUrl: bruto.foto_url,
+        ativo: !indisponivel,
+        imobziId: bruto.id,
+      };
+
+      const existente = await this.prisma.imovel.findUnique({ where: { imobziId: bruto.id } });
+
+      const imovelSalvo = existente
+        ? await this.prisma.imovel.update({ where: { id: existente.id }, data: dados })
+        : await this.prisma.imovel.create({ data: dados });
+
+      if (existente) atualizados++;
+      else novos++;
+
+      // Reindexa sempre — a descrição rica muda a cada sync (preço,
+      // disponibilidade), então o embedding precisa acompanhar.
+      await this.reindexar(imovelSalvo.id, imovelSalvo);
+    }
+
+    return { novos, atualizados, total: imoveisRemotos.length };
   }
 }

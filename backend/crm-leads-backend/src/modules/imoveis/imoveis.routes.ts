@@ -20,6 +20,10 @@ const MENSAGENS_ERRO: Record<string, { status: number; message: string }> = {
     status: 503,
     message: 'A extração por IA não está configurada no servidor (falta a chave da Anthropic)',
   },
+  IMOBZI_NAO_CONFIGURADO: {
+    status: 503,
+    message: 'A integração com o Imobzi não está configurada no servidor (faltam IMOBZI_API_BASE_URL / IMOBZI_API_TOKEN)',
+  },
 };
 
 function tratarErro(err: unknown, reply: import('fastify').FastifyReply) {
@@ -35,8 +39,6 @@ export async function imoveisRoutes(app: FastifyInstance) {
   app.register(async (protectedRoutes) => {
     protectedRoutes.addHook('preHandler', app.authenticate);
 
-    // Leitura é liberada pra qualquer usuário autenticado (corretor precisa
-    // ver o catálogo pra vincular um imóvel a um lead, por exemplo).
     protectedRoutes.get('/api/imoveis', async (request, reply) => {
       const { incluirInativos } = request.query as { incluirInativos?: string };
       const imoveis = await service.listar(incluirInativos === 'true');
@@ -50,8 +52,6 @@ export async function imoveisRoutes(app: FastifyInstance) {
       return reply.send(imovel);
     });
 
-    // Escrita (criar/editar/apagar catálogo) fica restrita a gestor/admin —
-    // mesma régua de outras bases sensíveis do sistema (templates, avaliação).
     protectedRoutes.register(async (adminRoutes) => {
       adminRoutes.addHook('preHandler', requireRole('gestor', 'admin'));
 
@@ -74,11 +74,6 @@ export async function imoveisRoutes(app: FastifyInstance) {
         return reply.code(204).send();
       });
 
-      /**
-       * Auto-preenchimento via IA — recebe um PDF (multipart) e devolve os
-       * campos extraídos, SEM salvar. O front usa isso pra pré-preencher o
-       * formulário de "Novo Imóvel", que o corretor revisa antes de confirmar.
-       */
       adminRoutes.post('/api/imoveis/extrair-pdf', async (request, reply) => {
         const arquivo = await request.file();
         if (!arquivo) return reply.code(400).send({ message: 'Nenhum arquivo enviado' });
@@ -99,6 +94,21 @@ export async function imoveisRoutes(app: FastifyInstance) {
         try {
           const dados = await service.extrairDadosDeDocumento({ origem: 'url', url });
           return reply.send(dados);
+        } catch (err) {
+          return tratarErro(err, reply);
+        }
+      });
+
+      /**
+       * Sincronização unidirecional Imobzi -> catálogo. Síncrona de
+       * propósito (o front mostra loading enquanto espera) — se o catálogo
+       * crescer muito, vale considerar mover pra uma fila em background no
+       * futuro, mas pro volume de uma imobiliária boutique isso é suficiente.
+       */
+      adminRoutes.post('/api/imoveis/sincronizar-imobzi', async (_request, reply) => {
+        try {
+          const resultado = await service.sincronizarComImobzi();
+          return reply.send(resultado);
         } catch (err) {
           return tratarErro(err, reply);
         }
