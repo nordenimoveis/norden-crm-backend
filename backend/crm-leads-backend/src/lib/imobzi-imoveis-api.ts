@@ -62,7 +62,7 @@ export async function buscarTodosImoveisImobzi(): Promise<ImobziImovelRaw[]> {
       throw new Error(`Falha ao buscar imóveis do Imobzi (status ${response.status})`);
     }
 
-    const dados = (await response.json()) as RespostaListaImobzi;
+    const dados: RespostaListaImobzi = await response.json();
     todos.push(...dados.results);
     cursor = dados.next_cursor ?? null;
   } while (cursor);
