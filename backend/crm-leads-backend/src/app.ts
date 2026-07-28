@@ -56,6 +56,7 @@ export function buildApp() {
   app.register(sistemaRoutes);
   app.register(iaRoutes);
   app.register(imoveisRoutes);
+  app.register(imobziIntegracaoRoutes);
   app.register(trackingRoutes);
   app.register(matchRoutes); // já define seus próprios caminhos (/api/sistema/...) internamente
   // app.register(cadenciasRoutes, { prefix: '/api' });
