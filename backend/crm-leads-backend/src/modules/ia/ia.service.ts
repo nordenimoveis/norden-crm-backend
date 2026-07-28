@@ -1,8 +1,7 @@
 import { PrismaClient } from '@prisma/client';
-import pdfParse from 'pdf-parse';
-import * as cheerio from 'cheerio';
 import { gerarEmbeddings, gerarEmbeddingUnico } from '@/lib/embeddings';
 import { gerarRespostaRAG } from '@/lib/claude-rag';
+import { extrairTextoDePdf, extrairTextoDeUrl } from '@/lib/extracao-texto';
 
 const TAMANHO_CHUNK = 1000; // caracteres — aproximação simples, não por token
 const SOBREPOSICAO_CHUNK = 150; // evita cortar uma ideia bem no meio entre dois chunks
@@ -29,21 +28,6 @@ export class IaService {
     return chunks.filter((c) => c.trim().length > 0);
   }
 
-  private async extrairTextoDePdf(buffer: Buffer): Promise<string> {
-    const resultado = await pdfParse(buffer);
-    return resultado.text;
-  }
-
-  private async extrairTextoDeUrl(url: string): Promise<string> {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Não foi possível acessar a URL (status ${response.status})`);
-
-    const html = await response.text();
-    const $ = cheerio.load(html);
-    $('script, style, nav, footer, header').remove();
-    return $('body').text();
-  }
-
   /**
    * Indexa um documento inteiro: extrai texto, quebra em chunks, gera os
    * embeddings de todos de uma vez (mais barato que um por um), e salva.
@@ -57,8 +41,8 @@ export class IaService {
   }) {
     const texto =
       params.origem === 'pdf'
-        ? await this.extrairTextoDePdf(params.bufferPdf!)
-        : await this.extrairTextoDeUrl(params.url!);
+        ? await extrairTextoDePdf(params.bufferPdf!)
+        : await extrairTextoDeUrl(params.url!);
 
     if (!texto || texto.trim().length < 20) {
       throw new Error('CONTEUDO_VAZIO');
@@ -124,6 +108,49 @@ export class IaService {
     );
 
     return resultados.map((r) => r.conteudo);
+  }
+
+  // ---------------------------------------------------------------------
+  // Simulador (Playground) — mesma busca semântica + geração usadas no
+  // atendimento de verdade, mas SEM tocar em nenhum lead real e devolvendo
+  // as fontes exatas usadas (transparência pro admin validar o chunking).
+  // ---------------------------------------------------------------------
+
+  private async buscarContextoComFontes(pergunta: string) {
+    const embeddingPergunta = await gerarEmbeddingUnico(pergunta, 'query');
+    const vetorLiteral = `[${embeddingPergunta.join(',')}]`;
+
+    return this.prisma.$queryRawUnsafe<
+      { conteudo: string; tituloDocumento: string; distancia: number }[]
+    >(
+      `SELECT dc.conteudo, d.titulo AS "tituloDocumento", dc.embedding <=> $1::vector AS distancia
+       FROM documento_chunks dc
+       JOIN documentos d ON d.id = dc.documento_id
+       ORDER BY distancia ASC
+       LIMIT $2`,
+      vetorLiteral,
+      TOP_K_CONTEXTO
+    );
+  }
+
+  async simular(pergunta: string) {
+    const fontes = await this.buscarContextoComFontes(pergunta);
+
+    const resposta = await gerarRespostaRAG({
+      perguntaDoLead: pergunta,
+      contexto: fontes.map((f) => f.conteudo),
+      historicoConversa: [],
+    });
+
+    return {
+      resposta,
+      fontes: fontes.map((f) => ({
+        conteudo: f.conteudo,
+        tituloDocumento: f.tituloDocumento,
+        // Similaridade em % é mais legível pro admin que a distância crua
+        similaridade: Math.round(Math.max(0, Math.min(1, 1 - f.distancia)) * 100),
+      })),
+    };
   }
 
   // ---------------------------------------------------------------------

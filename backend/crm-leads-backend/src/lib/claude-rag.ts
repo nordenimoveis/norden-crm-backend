@@ -13,6 +13,46 @@ function obterCliente() {
 // usando o modelo atual da mesma "classe" (Sonnet), que é quem substitui.
 const MODELO = 'claude-sonnet-5';
 
+export type DadosImovelExtraidos = {
+  titulo: string;
+  bairro: string | null;
+  cidade: string | null;
+  valor: number | null;
+  metragem: number | null;
+  quartos: number | null;
+  descricao: string;
+};
+
+/**
+ * Lê o texto de um anúncio/documento de imóvel e extrai os campos
+ * estruturados do nosso catálogo — a "cereja do bolo" do cadastro: em vez
+ * do corretor digitar tudo, ele sobe o PDF/URL e a IA pré-preenche. O
+ * corretor ainda revisa e confirma antes de salvar (erro de preço/metragem
+ * é caro, não convém confiar 100% sem um humano olhar).
+ */
+export async function extrairDadosImovel(textoDocumento: string): Promise<DadosImovelExtraidos> {
+  const anthropic = obterCliente();
+
+  const resposta = await anthropic.messages.create({
+    model: MODELO,
+    max_tokens: 1000,
+    system: `Você extrai dados estruturados de anúncios ou documentos de imóveis. Responda APENAS com um JSON válido, sem nenhum texto antes ou depois, exatamente neste formato:
+{"titulo": string, "bairro": string ou null, "cidade": string ou null, "valor": number ou null (em reais, só o número, sem "R$" nem pontuação), "metragem": number ou null (em m², só o número), "quartos": number ou null, "descricao": string (resumo de 2-3 frases com as características e diferenciais do imóvel)}
+Se um dado não estiver claramente no texto, use null nesse campo — NUNCA invente valor, metragem ou qualquer dado factual.`,
+    messages: [{ role: 'user', content: textoDocumento.slice(0, 8000) }],
+  });
+
+  const bloco = resposta.content.find((b) => b.type === 'text');
+  const textoResposta = bloco && bloco.type === 'text' ? bloco.text : '{}';
+  const jsonLimpo = textoResposta.replace(/```json|```/g, '').trim();
+
+  try {
+    return JSON.parse(jsonLimpo);
+  } catch {
+    throw new Error('FALHA_AO_INTERPRETAR_RESPOSTA_IA');
+  }
+}
+
 /**
  * Gera a resposta aterrada no contexto recuperado (RAG). O prompt é
  * deliberadamente restritivo: a IA só pode responder com base no que foi

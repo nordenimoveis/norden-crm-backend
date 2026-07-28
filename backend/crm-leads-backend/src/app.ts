@@ -17,6 +17,9 @@ import { campanhasDisparoRoutes } from '@/modules/campanhas-disparo/campanhas-di
 import { templatesMensagemRoutes } from '@/modules/templates-mensagem/templates-mensagem.routes';
 import { sistemaRoutes } from '@/modules/sistema/sistema.routes';
 import { iaRoutes } from '@/modules/ia/ia.routes';
+import { imoveisRoutes } from '@/modules/imoveis/imoveis.routes';
+import { trackingRoutes } from '@/modules/tracking/tracking.routes';
+import { matchRoutes } from '@/modules/match/match.routes';
 // À medida que os demais módulos forem construídos, registre aqui:
 // import { cadenciasRoutes } from '@/modules/cadencias/cadencias.routes';
 // import { campanhasRoutes } from '@/modules/campanhas/campanhas.routes';
@@ -50,7 +53,10 @@ export function buildApp() {
   app.register(campanhasDisparoRoutes); // já define seus próprios caminhos (/api/campanhas-disparo/...) internamente
   app.register(templatesMensagemRoutes); // idem — /api/templates-mensagem/...
   app.register(sistemaRoutes);
-  app.register(iaRoutes); // já define seus próprios caminhos (/api/sistema/...) internamente
+  app.register(iaRoutes);
+  app.register(imoveisRoutes);
+  app.register(trackingRoutes);
+  app.register(matchRoutes); // já define seus próprios caminhos (/api/sistema/...) internamente
   // app.register(cadenciasRoutes, { prefix: '/api' });
   // app.register(campanhasRoutes, { prefix: '/api' });
   // app.register(imoveisRoutes, { prefix: '/api' });

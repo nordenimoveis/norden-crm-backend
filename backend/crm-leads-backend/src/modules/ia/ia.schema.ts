@@ -5,6 +5,10 @@ export const ingerirUrlSchema = z.object({
   url: z.string().url('URL inválida'),
 });
 
+export const simularPerguntaSchema = z.object({
+  pergunta: z.string().min(1, 'Digite uma pergunta'),
+});
+
 export const atualizarStatusIASchema = z.object({
   statusIA: z.enum(['inativa', 'ativa', 'pausada_humano']),
 });

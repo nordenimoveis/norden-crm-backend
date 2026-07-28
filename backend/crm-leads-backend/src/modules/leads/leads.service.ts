@@ -10,6 +10,7 @@ import {
   AtribuirCorretorInput,
   ListarLeadsQuery,
 } from './leads.schema';
+import { incrementarScore } from '@/lib/score.service';
 import { CadenciasService } from '@/modules/cadencias/cadencias.service';
 import { RoundRobinService } from '@/lib/round-robin';
 import { notificarLeadAtualizado } from '@/lib/pusher';
@@ -392,7 +393,20 @@ export class LeadsService {
       throw new Error('SEM_PERMISSAO');
     }
 
-    return this.prisma.lead.update({ where: { id }, data: input });
+    const atualizado = await this.prisma.lead.update({ where: { id }, data: input });
+
+    // Inteligência Norden — marcar uma VISITA (não qualquer compromisso)
+    // pela primeira vez conta como sinal forte de intenção de compra.
+    const virouVisitaNova =
+      input.tipoAgendamento === 'visita' &&
+      !!input.dataAgendamento &&
+      lead.tipoAgendamento !== 'visita';
+
+    if (virouVisitaNova) {
+      incrementarScore(this.prisma, id, 'solicitacao_visita').catch(() => {});
+    }
+
+    return atualizado;
   }
 
   async atualizarStatus(id: string, input: AtualizarStatusInput, usuario: UsuarioAutenticado) {

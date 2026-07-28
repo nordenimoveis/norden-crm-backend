@@ -95,13 +95,35 @@ model Imovel {
   bairro             String?
   cidade             String   @default("Florianópolis")
   valor              Decimal? @db.Decimal(14, 2)
+  metragem           Int?     // m² — usado no embedding e exibido no card de match
+  quartos            Int?
+  descricao          String?  // texto semântico livre — vira o embedding de match
+  fotoUrl            String?  @map("foto_url")
   referenciaExterna  String?  @map("referencia_externa")
   ativo              Boolean  @default(true)
   criadoEm           DateTime @default(now()) @map("criado_em")
+  embedding          Unsupported("vector(1024)")?
 
   leads Lead[]
+  visualizacoes ImovelVisualizacao[]
 
   @@map("imoveis")
+}
+
+// Registra quando um LEAD visualiza um imóvel específico (via link
+// rastreado) — soma score e também vira histórico de interesse, útil pra
+// refinar o "motivo do match" no futuro (ex: "já visitou esse anúncio 2x").
+model ImovelVisualizacao {
+  id        String   @id @default(uuid())
+  leadId    String   @map("lead_id")
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  imovelId  String   @map("imovel_id")
+  imovel    Imovel   @relation(fields: [imovelId], references: [id], onDelete: Cascade)
+  criadoEm  DateTime @default(now()) @map("criado_em")
+
+  @@index([leadId])
+  @@index([imovelId])
+  @@map("imovel_visualizacoes")
 }
 
 model Campanha {
@@ -206,6 +228,11 @@ model Lead {
   statusIA   StatusIA @default(inativa) @map("status_ia")
   rascunhoIA String?  @map("rascunho_ia")
 
+  // --- Inteligência Norden ---------------------------------------------
+  score          Int     @default(0) // pontuação de engajamento, soma de eventos (ver score.service.ts)
+  perfilBusca    Json?   @map("perfil_busca") // {bairro, orcamentoMin, orcamentoMax, quartos, finalidade}
+  perfilSemantico String? @map("perfil_semantico") // descrição qualitativa livre, usada no embedding de match
+
   criadoEm     DateTime   @default(now()) @map("criado_em")
   atualizadoEm DateTime   @updatedAt @map("atualizado_em")
 
@@ -213,6 +240,7 @@ model Lead {
   mensagens         Mensagem[]
   destinatarioDeCampanhas CampanhaDisparoLead[]
   notas             NotaInterna[]
+  visualizacoesImoveis ImovelVisualizacao[]
 
   @@unique([telefone, campanhaId])
   @@index([status])

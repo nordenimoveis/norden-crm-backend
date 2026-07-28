@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireRole } from '@/plugins/auth';
 import { IaService } from './ia.service';
-import { ingerirUrlSchema } from './ia.schema';
+import { ingerirUrlSchema, simularPerguntaSchema } from './ia.schema';
 
 const MENSAGENS_ERRO: Record<string, { status: number; message: string }> = {
   CONTEUDO_VAZIO: {
@@ -80,6 +80,24 @@ export async function iaRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
       await service.deletarDocumento(id);
       return reply.code(204).send();
+    });
+
+    /**
+     * Simulador (Playground) — mesma busca semântica + geração do
+     * atendimento de verdade, mas NUNCA toca em nenhum lead nem manda
+     * mensagem no WhatsApp. Devolve as fontes usadas, pro admin validar
+     * se o chunking dos documentos está bom antes de confiar na IA com
+     * clientes reais.
+     */
+    protectedRoutes.post('/api/ia/simular', async (request, reply) => {
+      const body = simularPerguntaSchema.parse(request.body);
+
+      try {
+        const resultado = await service.simular(body.pergunta);
+        return reply.send(resultado);
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
     });
   });
 }

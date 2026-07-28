@@ -4,6 +4,7 @@ import { cancelarJobAgendado } from '@/queues/cadencia.queue';
 import { notificarNovaMensagem, notificarLeadAtualizado, notificarStatusMensagem } from '@/lib/pusher';
 import { EnviarTextoInput, EnviarTemplateInput, WhatsappWebhookPayload } from './whatsapp.schema';
 import { IaService } from '@/modules/ia/ia.service';
+import { incrementarScore } from '@/lib/score.service';
 
 const GRAPH_API_VERSION = 'v19.0';
 
@@ -208,6 +209,10 @@ export class WhatsappService {
       conteudo: mensagem.conteudo,
       criadoEm: mensagem.criadoEm,
     });
+
+    // Inteligência Norden — cada mensagem do lead soma ao score de
+    // engajamento. Não trava o fluxo se falhar (não é crítico).
+    incrementarScore(this.prisma, lead.id, 'mensagem_recebida').catch(() => {});
 
     // --- Ramo da IA ---------------------------------------------------
     // Se a IA está ativa pra esse lead, ela gera E MANDA a resposta

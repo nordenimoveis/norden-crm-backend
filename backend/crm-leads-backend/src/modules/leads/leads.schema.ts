@@ -73,6 +73,14 @@ export const imobziLeadLegadoSchema = z.object({
 // propósito: já existem rotas dedicadas (atualizarStatus/atribuirCorretor)
 // com verificação de RBAC própria. Misturar tudo num PATCH genérico sem
 // essas checagens seria um jeito de um corretor contornar essas regras.
+export const perfilBuscaSchema = z.object({
+  bairro: z.string().optional(),
+  orcamentoMin: z.number().positive().optional(),
+  orcamentoMax: z.number().positive().optional(),
+  quartos: z.number().int().positive().optional(),
+  finalidade: z.enum(['moradia', 'investimento']).optional(),
+});
+
 export const atualizarLeadSchema = z.object({
   nome: z.string().min(1).optional(),
   telefone: z.string().min(8, 'Telefone inválido').optional(),
@@ -81,6 +89,8 @@ export const atualizarLeadSchema = z.object({
   // Data/hora + tipo do próximo compromisso — null explícito serve pra "desmarcar"
   dataAgendamento: z.coerce.date().nullable().optional(),
   tipoAgendamento: tipoAgendamentoEnum.nullable().optional(),
+  perfilBusca: perfilBuscaSchema.nullable().optional(),
+  perfilSemantico: z.string().nullable().optional(),
 });
 
 export const criarNotaInternaSchema = z.object({
