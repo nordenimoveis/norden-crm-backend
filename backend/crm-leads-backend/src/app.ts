@@ -18,6 +18,7 @@ import { templatesMensagemRoutes } from '@/modules/templates-mensagem/templates-
 import { sistemaRoutes } from '@/modules/sistema/sistema.routes';
 import { iaRoutes } from '@/modules/ia/ia.routes';
 import { imoveisRoutes } from '@/modules/imoveis/imoveis.routes';
+import { imobziIntegracaoRoutes } from '@/modules/integracoes/imobzi/imobzi.routes';
 import { trackingRoutes } from '@/modules/tracking/tracking.routes';
 import { matchRoutes } from '@/modules/match/match.routes';
 // À medida que os demais módulos forem construídos, registre aqui:
