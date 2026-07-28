@@ -84,16 +84,14 @@ export async function iaRoutes(app: FastifyInstance) {
 
     /**
      * Simulador (Playground) — mesma busca semântica + geração do
-     * atendimento de verdade, mas NUNCA toca em nenhum lead nem manda
-     * mensagem no WhatsApp. Devolve as fontes usadas, pro admin validar
-     * se o chunking dos documentos está bom antes de confiar na IA com
-     * clientes reais.
+     * atendimento de verdade (incluindo a reescrita de query), mas NUNCA
+     * toca em nenhum lead nem manda mensagem no WhatsApp.
      */
     protectedRoutes.post('/api/ia/simular', async (request, reply) => {
       const body = simularPerguntaSchema.parse(request.body);
 
       try {
-        const resultado = await service.simular(body.pergunta);
+        const resultado = await service.simular(body.pergunta, body.historico);
         return reply.send(resultado);
       } catch (err) {
         return tratarErro(err, reply);

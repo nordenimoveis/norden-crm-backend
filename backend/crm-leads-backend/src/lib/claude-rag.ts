@@ -9,8 +9,72 @@ function obterCliente() {
   return cliente;
 }
 
+// Claude 3.5 Sonnet foi desativado pela Anthropic em 5 de janeiro de 2026 —
+// usando o modelo atual da mesma "classe" (Sonnet), que é quem substitui.
 const MODELO = 'claude-sonnet-5';
+// Reescrita de query é uma tarefa simples e curta — não precisa do modelo
+// principal, o Haiku é mais rápido e mais barato pra esse passo intermediário.
+const MODELO_RAPIDO = 'claude-haiku-4-5-20251001';
 
+/**
+ * Corrige a "amnésia de contexto" do RAG conversacional: se o cliente
+ * pergunta "o que o condomínio oferece?" depois de ter falado sobre um
+ * imóvel específico, a busca semântica sozinha (só com essa frase isolada)
+ * não sabe QUAL condomínio — e pode trazer contexto do imóvel errado.
+ *
+ * Aqui reescrevemos a pergunta pra ser autossuficiente ANTES de gerar o
+ * embedding de busca, substituindo pronomes/referências implícitas pelos
+ * nomes reais já citados na conversa. Só afeta a BUSCA — a resposta final
+ * ainda é gerada a partir da pergunta original do cliente (soa mais
+ * natural manter a pergunta como a pessoa realmente escreveu).
+ */
+export async function reescreverPergunta(
+  historicoConversa: { autor: 'lead' | 'equipe'; texto: string }[],
+  perguntaAtual: string
+): Promise<string> {
+  if (historicoConversa.length === 0) return perguntaAtual;
+
+  const anthropic = obterCliente();
+
+  const historicoFormatado = historicoConversa
+    .slice(-8)
+    .map((m) => `${m.autor === 'lead' ? 'Cliente' : 'Atendimento'}: ${m.texto}`)
+    .join('\n');
+
+  const resposta = await anthropic.messages.create({
+    model: MODELO_RAPIDO,
+    max_tokens: 200,
+    system: `Dada a conversa abaixo, reescreva a ÚLTIMA pergunta do cliente para que ela seja uma pergunta independente e completa, substituindo pronomes e referências implícitas (ex: "ele", "esse imóvel", "lá") pelos nomes reais (ex: nome do imóvel/empreendimento) já citados na conversa.
+
+Se a pergunta já for independente e não depender de nada dito antes, retorne ela exatamente como está.
+
+Retorne APENAS a pergunta reescrita, sem explicação, sem aspas, sem comentário.`,
+    messages: [
+      {
+        role: 'user',
+        content: `Conversa:\n${historicoFormatado}\n\nÚltima pergunta do cliente: ${perguntaAtual}`,
+      },
+    ],
+  });
+
+  const bloco = resposta.content.find((b) => b.type === 'text');
+  const textoReescrito = bloco && bloco.type === 'text' ? bloco.text.trim() : perguntaAtual;
+
+  return textoReescrito || perguntaAtual;
+}
+
+/**
+ * Gera a resposta aterrada no contexto recuperado (RAG). O prompt é
+ * deliberadamente restritivo: a IA só pode responder com base no que foi
+ * recuperado da base de conhecimento — se não tiver contexto suficiente,
+ * instruímos ela a dizer isso em vez de inventar (preço, disponibilidade,
+ * condição de imóvel são informações caras de errar).
+ *
+ * Como a IA aqui manda a mensagem direto pro WhatsApp sem revisão humana,
+ * essa restrição de "não inventar" é a principal rede de segurança —
+ * cumpre o mesmo papel que uma revisão humana cumpriria, sem bloquear o
+ * envio automático que foi pedido.
+ */
 export async function gerarRespostaRAG(params: {
   perguntaDoLead: string;
   contexto: string[];
@@ -25,7 +89,7 @@ export async function gerarRespostaRAG(params: {
       : '(nenhum trecho relevante encontrado na base de conhecimento)';
 
   const historicoFormatado = params.historicoConversa
-    .slice(-10)
+    .slice(-10) // últimas 10 mensagens são suficientes de contexto conversacional
     .map((m) => `${m.autor === 'lead' ? 'Cliente' : 'Norden'}: ${m.texto}`)
     .join('\n');
 
@@ -55,8 +119,11 @@ ${contextoFormatado}`;
 
 /**
  * Reestrutura o texto bruto extraído de um PDF (frequentemente "sopa de
- * números" quando o documento tem tabelas). O Claude reconstrói isso em
- * texto legível ANTES do documento virar chunks+embeddings.
+ * números" quando o documento tem tabelas — a extração simples não sabe
+ * onde termina uma coluna e começa outra). O Claude reconstrói isso em
+ * texto legível/Markdown ANTES do documento virar chunks+embeddings — é
+ * essa versão reestruturada que fica na base de conhecimento, não o texto
+ * bruto original.
  */
 export async function reestruturarTextoDocumento(textoBruto: string): Promise<string> {
   const anthropic = obterCliente();
@@ -86,6 +153,13 @@ export type DadosImovelExtraidos = {
   descricao: string;
 };
 
+/**
+ * Lê o texto de um anúncio/documento de imóvel e extrai os campos
+ * estruturados do nosso catálogo — a "cereja do bolo" do cadastro: em vez
+ * do corretor digitar tudo, ele sobe o PDF/URL e a IA pré-preenche. O
+ * corretor ainda revisa e confirma antes de salvar (erro de preço/metragem
+ * é caro, não convém confiar 100% sem um humano olhar).
+ */
 export async function extrairDadosImovel(textoDocumento: string): Promise<DadosImovelExtraidos> {
   const anthropic = obterCliente();
 
