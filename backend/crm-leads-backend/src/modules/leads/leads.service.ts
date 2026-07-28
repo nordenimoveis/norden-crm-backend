@@ -393,7 +393,10 @@ export class LeadsService {
       throw new Error('SEM_PERMISSAO');
     }
 
-    const atualizado = await this.prisma.lead.update({ where: { id }, data: input });
+    const atualizado = await this.prisma.lead.update({
+      where: { id },
+      data: input as Prisma.LeadUncheckedUpdateInput,
+    });
 
     // Inteligência Norden — marcar uma VISITA (não qualquer compromisso)
     // pela primeira vez conta como sinal forte de intenção de compra.
