@@ -42,7 +42,8 @@ export async function buscarContatosImobzi(): Promise<ImobziContatoRaw[]> {
   let cursor: string | null = null;
 
   do {
-    const url = new URL(`${env.IMOBZI_API_BASE_URL}/contacts`);
+    const baseUrl = env.IMOBZI_API_BASE_URL.replace(/\/+$/, '');
+    const url = new URL(`${baseUrl}/contacts`);
     if (cursor) url.searchParams.set('cursor', cursor);
 
     const response = await fetch(url.toString(), {
