@@ -1,46 +1,58 @@
 import { env } from '@/config/env';
 
 /**
- * Formato do imóvel vindo do Imobzi — os nomes de campo abaixo são uma
- * estimativa razoável baseada no que já vimos da API de LEADS do Imobzi
- * (que usamos na integração original). É bem provável que precisemos
- * ajustar nomes de campo assim que testarmos contra a API de imóveis de
- * verdade — foi exatamente o que aconteceu da primeira vez, quando
- * descobrimos que o telefone do lead vinha aninhado em `cellphone: {number,
- * country_code}` em vez de um campo simples.
+ * Formato REAL confirmado contra a API do Imobzi (testado em produção) —
+ * bem diferente da estimativa inicial. `neighborhood` = bairro, `bedroom` =
+ * quartos, `suite` = suítes, `area` = metragem, `cover_photo.url` = foto.
+ * Não existe campo de descrição/diferenciais nessa listagem — o texto rico
+ * é montado só com os dados estruturados disponíveis aqui.
  */
 export type ImobziImovelRaw = {
-  id: string;
-  titulo?: string;
-  bairro?: string;
-  cidade?: string;
-  metragem?: number;
-  quartos?: number;
-  suites?: number;
-  valor?: number;
-  status?: string; // ex: "disponivel" | "vendido" | "inativo" — confirmar nomes reais
-  descricao?: string;
-  foto_url?: string;
+  property_id: string;
+  db_id: string;
+  building_name?: string;
+  property_type?: string; // "Apartamento" | "Casa" | ...
+  address?: string;
+  neighborhood?: string;
+  city?: string;
+  sale_value?: number;
+  rental_value?: number;
+  area?: number;
+  useful_area?: number;
+  bedroom?: number;
+  suite?: number;
+  bathroom?: number;
+  garage?: number;
+  status?: string; // "available" confirmado; outros valores (vendido/inativo) ainda não vistos
+  active?: boolean;
+  cover_photo?: { url?: string };
+  code?: string;
 };
 
 type RespostaListaImobzi = {
-  results: ImobziImovelRaw[];
-  next_cursor?: string | null;
+  database: string;
+  cursor?: string | null;
+  count: number;
+  properties: ImobziImovelRaw[];
 };
 
-const STATUS_INDISPONIVEL = ['vendido', 'inativo', 'indisponivel', 'reservado'];
-
-export function statusIndicaIndisponivel(status?: string): boolean {
-  if (!status) return false;
-  return STATUS_INDISPONIVEL.includes(status.toLowerCase());
+/**
+ * "Indisponível" = active explicitamente false, OU status diferente de
+ * "available". Ainda não vimos um exemplo real de imóvel vendido/inativo
+ * no payload de teste — se os valores reais forem diferentes do esperado,
+ * ajustamos aqui.
+ */
+export function statusIndicaIndisponivel(bruto: ImobziImovelRaw): boolean {
+  if (bruto.active === false) return true;
+  if (bruto.status && bruto.status !== 'available') return true;
+  return false;
 }
 
 /**
- * Busca TODOS os imóveis do Imobzi, paginando por cursor (mesmo padrão já
- * usado na importação de leads legados). NÃO filtra por status no
- * servidor — trazemos tudo, inclusive vendidos/inativos, porque o próprio
- * sync precisa saber disso pra DESATIVAR esses imóveis no nosso catálogo
- * (não simplesmente ignorá-los).
+ * Busca TODOS os imóveis do Imobzi, paginando por cursor. O cursor vem na
+ * RAIZ da resposta (`cursor`, não aninhado) — repassamos ele de volta na
+ * próxima chamada. Paramos quando: não vier mais cursor, o cursor repetir
+ * (proteção contra loop infinito), ou já tivermos coletado `count` itens.
  */
 export async function buscarTodosImoveisImobzi(): Promise<ImobziImovelRaw[]> {
   if (!env.IMOBZI_API_BASE_URL || !env.IMOBZI_API_TOKEN) {
@@ -49,6 +61,7 @@ export async function buscarTodosImoveisImobzi(): Promise<ImobziImovelRaw[]> {
 
   const todos: ImobziImovelRaw[] = [];
   let cursor: string | null = null;
+  let totalEsperado = Infinity;
 
   do {
     const baseUrl = env.IMOBZI_API_BASE_URL.replace(/\/+$/, ''); // remove barra(s) sobrando no final
@@ -65,8 +78,11 @@ export async function buscarTodosImoveisImobzi(): Promise<ImobziImovelRaw[]> {
     }
 
     const dados = (await response.json()) as RespostaListaImobzi;
-    todos.push(...dados.results);
-    cursor = dados.next_cursor ?? null;
+    todos.push(...dados.properties);
+    totalEsperado = dados.count;
+
+    const novoCursor = dados.cursor ?? null;
+    cursor = !novoCursor || novoCursor === cursor || todos.length >= totalEsperado ? null : novoCursor;
   } while (cursor);
 
   return todos;
