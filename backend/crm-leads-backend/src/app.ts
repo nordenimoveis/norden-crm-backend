@@ -19,6 +19,7 @@ import { sistemaRoutes } from '@/modules/sistema/sistema.routes';
 import { iaRoutes } from '@/modules/ia/ia.routes';
 import { imoveisRoutes } from '@/modules/imoveis/imoveis.routes';
 import { imobziIntegracaoRoutes } from '@/modules/integracoes/imobzi/imobzi.routes';
+import { imobziWebhookRoutes } from '@/modules/integracoes/imobzi/imobzi-webhook.routes';
 import { trackingRoutes } from '@/modules/tracking/tracking.routes';
 import { matchRoutes } from '@/modules/match/match.routes';
 // À medida que os demais módulos forem construídos, registre aqui:
@@ -57,6 +58,7 @@ export function buildApp() {
   app.register(iaRoutes);
   app.register(imoveisRoutes);
   app.register(imobziIntegracaoRoutes);
+  app.register(imobziWebhookRoutes);
   app.register(trackingRoutes);
   app.register(matchRoutes); // já define seus próprios caminhos (/api/sistema/...) internamente
   // app.register(cadenciasRoutes, { prefix: '/api' });
