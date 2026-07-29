@@ -113,34 +113,41 @@ export class ImoveisService {
   // ---------------------------------------------------------------------
 
   /**
-   * Monta a "string rica" descritiva usada como texto-fonte do embedding —
-   * é isso que faz o motor de busca semântica conseguir responder sobre
-   * imóveis vindos do Imobzi com a mesma qualidade dos cadastrados manualmente.
+   * Monta a "string rica" descritiva usada como texto-fonte do embedding.
+   * Baseada só em dados estruturados — a listagem de imóveis do Imobzi não
+   * traz um campo de descrição/diferenciais (confirmado testando a API
+   * real), então não há "texto livre" pra incluir aqui por enquanto.
    */
   private montarDescricaoRica(bruto: ImobziImovelRaw): string {
+    const tipo = bruto.property_type || 'Imóvel';
+    const nomeEmpreendimento = bruto.building_name ? ` no ${bruto.building_name}` : '';
+
     const caracteristicas = [
-      `Apartamento localizado no bairro ${bruto.bairro ?? 'não informado'}`,
-      bruto.metragem ? `com ${bruto.metragem} metros quadrados` : null,
-      bruto.quartos ? `${bruto.quartos} quartos` : null,
-      bruto.suites ? `sendo ${bruto.suites} suítes` : null,
+      `${tipo}${nomeEmpreendimento} localizado no bairro ${bruto.neighborhood ?? 'não informado'}`,
+      bruto.area ? `com ${bruto.area} metros quadrados` : null,
+      bruto.bedroom ? `${bruto.bedroom} quartos` : null,
+      bruto.suite ? `sendo ${bruto.suite} suítes` : null,
+      bruto.garage ? `${bruto.garage} vagas de garagem` : null,
     ]
       .filter(Boolean)
       .join(', ');
 
-    const valorTexto = bruto.valor
-      ? `Valor de venda: R$ ${bruto.valor.toLocaleString('pt-BR')}.`
+    // Alguns imóveis são só de aluguel (sale_value = 0, rental_value > 0)
+    const ehAluguel = !bruto.sale_value && !!bruto.rental_value;
+    const valorPrincipal = bruto.sale_value || bruto.rental_value || 0;
+    const valorTexto = valorPrincipal
+      ? `Valor de ${ehAluguel ? 'aluguel' : 'venda'}: R$ ${valorPrincipal.toLocaleString('pt-BR')}${ehAluguel ? '/mês' : ''}.`
       : '';
-    const diferenciais = bruto.descricao ? `Diferenciais: ${bruto.descricao}` : '';
 
-    return [`${caracteristicas}.`, valorTexto, diferenciais].filter(Boolean).join(' ');
+    return [`${caracteristicas}.`, valorTexto].filter(Boolean).join(' ');
   }
 
   /**
    * Sincronização unidirecional: Imobzi é a fonte da verdade, nosso
-   * catálogo é o espelho. Upsert por `imobziId` — se já existe, atualiza;
-   * se não existe, cria. Imóveis marcados como vendido/inativo no Imobzi
-   * são desativados aqui (não excluídos — o histórico de match continua
-   * íntegro), e o motor de match já ignora tudo que `ativo = false`.
+   * catálogo é o espelho. Upsert por `imobziId` (usamos `property_id` do
+   * Imobzi) — se já existe, atualiza; se não existe, cria. Imóveis
+   * marcados como indisponíveis são desativados aqui (não excluídos), e o
+   * motor de match já ignora tudo que `ativo = false`.
    */
   async sincronizarComImobzi() {
     const imoveisRemotos = await buscarTodosImoveisImobzi();
@@ -149,23 +156,28 @@ export class ImoveisService {
     let atualizados = 0;
 
     for (const bruto of imoveisRemotos) {
-      const indisponivel = statusIndicaIndisponivel(bruto.status);
+      const indisponivel = statusIndicaIndisponivel(bruto);
       const descricaoRica = this.montarDescricaoRica(bruto);
+      const valorPrincipal = bruto.sale_value || bruto.rental_value || undefined;
 
       const dados = {
-        titulo: bruto.titulo || `Imóvel ${bruto.id}`,
-        bairro: bruto.bairro,
-        cidade: bruto.cidade || 'Florianópolis',
-        valor: bruto.valor,
-        metragem: bruto.metragem,
-        quartos: bruto.quartos,
+        titulo:
+          bruto.building_name ||
+          `${bruto.property_type ?? 'Imóvel'} - ${bruto.neighborhood ?? bruto.code ?? bruto.property_id}`,
+        bairro: bruto.neighborhood,
+        cidade: bruto.city || 'Florianópolis',
+        valor: valorPrincipal,
+        metragem: bruto.area ? Math.round(bruto.area) : undefined,
+        quartos: bruto.bedroom,
         descricao: descricaoRica,
-        fotoUrl: bruto.foto_url,
+        fotoUrl: bruto.cover_photo?.url,
         ativo: !indisponivel,
-        imobziId: bruto.id,
+        imobziId: bruto.property_id,
       };
 
-      const existente = await this.prisma.imovel.findUnique({ where: { imobziId: bruto.id } });
+      const existente = await this.prisma.imovel.findUnique({
+        where: { imobziId: bruto.property_id },
+      });
 
       const imovelSalvo = existente
         ? await this.prisma.imovel.update({ where: { id: existente.id }, data: dados })
