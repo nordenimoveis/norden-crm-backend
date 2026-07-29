@@ -51,7 +51,8 @@ export async function buscarTodosImoveisImobzi(): Promise<ImobziImovelRaw[]> {
   let cursor: string | null = null;
 
   do {
-    const url = new URL(`${env.IMOBZI_API_BASE_URL}/imoveis`);
+    const baseUrl = env.IMOBZI_API_BASE_URL.replace(/\/+$/, ''); // remove barra(s) sobrando no final
+    const url = new URL(`${baseUrl}/properties`);
     if (cursor) url.searchParams.set('cursor', cursor);
 
     const response = await fetch(url.toString(), {
