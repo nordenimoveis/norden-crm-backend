@@ -51,7 +51,8 @@ export async function buscarContatosImobzi(): Promise<ImobziContatoRaw[]> {
     });
 
     if (!response.ok) {
-      throw new Error(`Falha ao buscar contatos do Imobzi (status ${response.status})`);
+      const corpoErro = await response.text().catch(() => '');
+      throw new Error(`Falha ao buscar contatos do Imobzi (status ${response.status}): ${corpoErro}`);
     }
 
     const dados = (await response.json()) as RespostaListaContatosImobzi;
