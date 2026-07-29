@@ -18,7 +18,7 @@ import { templatesMensagemRoutes } from '@/modules/templates-mensagem/templates-
 import { sistemaRoutes } from '@/modules/sistema/sistema.routes';
 import { iaRoutes } from '@/modules/ia/ia.routes';
 import { imoveisRoutes } from '@/modules/imoveis/imoveis.routes';
-import { imobziIntegracaoRoutes } from '@/modules/imobzi/imobzi.routes';
+import { imobziSyncRoutes } from '@/modules/imobzi/imobzi-sync.routes';
 import { imobziWebhookRoutes } from '@/modules/imobzi/imobzi-webhook.routes';
 import { trackingRoutes } from '@/modules/tracking/tracking.routes';
 import { matchRoutes } from '@/modules/match/match.routes';
@@ -57,7 +57,7 @@ export function buildApp() {
   app.register(sistemaRoutes);
   app.register(iaRoutes);
   app.register(imoveisRoutes);
-  app.register(imobziIntegracaoRoutes);
+  app.register(imobziSyncRoutes);
   app.register(imobziWebhookRoutes);
   app.register(trackingRoutes);
   app.register(matchRoutes); // já define seus próprios caminhos (/api/sistema/...) internamente
