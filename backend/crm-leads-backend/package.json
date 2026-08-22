@@ -4,6 +4,9 @@
   "private": true,
   "description": "Backend do CRM de leads WhatsApp (Meta Ads + Cadência)",
   "main": "dist/server.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "tsx watch src/server.ts",
