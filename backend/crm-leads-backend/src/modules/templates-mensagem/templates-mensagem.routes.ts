@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireRole } from '@/plugins/auth';
 import { criarTemplateMensagemSchema, atualizarTemplateMensagemSchema } from './templates-mensagem.schema';
+import { TemplatesMensagemService } from './templates-mensagem.service';
 
 /**
  * CRUD simples de templates de mensagem. A criação/aprovação de um template
@@ -14,9 +15,21 @@ export async function templatesMensagemRoutes(app: FastifyInstance) {
     protectedRoutes.addHook('preHandler', app.authenticate);
     protectedRoutes.addHook('preHandler', requireRole('gestor', 'admin'));
 
+    const service = new TemplatesMensagemService(app.prisma);
+
     protectedRoutes.get('/api/templates-mensagem', async (_request, reply) => {
       const templates = await app.prisma.templateMensagem.findMany({ orderBy: { criadoEm: 'desc' } });
       return reply.send(templates);
+    });
+
+    // Puxa os templates aprovados direto da Meta (Graph API) e faz upsert.
+    protectedRoutes.post('/api/templates-mensagem/sincronizar-meta', async (_request, reply) => {
+      try {
+        const resumo = await service.sincronizarComMeta();
+        return reply.send(resumo);
+      } catch (err) {
+        return reply.code(400).send({ message: (err as Error).message });
+      }
     });
 
     protectedRoutes.post('/api/templates-mensagem', async (request, reply) => {
