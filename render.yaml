@@ -1,0 +1,114 @@
+# Render Blueprint — sobe o back-end inteiro de uma vez:
+#   - API (Fastify)            → recebe webhooks e serve o painel
+#   - Worker da cadência       → processo sempre ligado (BullMQ/Redis)
+#   - PostgreSQL (com pgvector) → banco do CRM + IA/RAG + match de imóveis
+#   - Redis (Key Value)        → fila da cadência e teto anti-ban
+#
+# Como usar no Render:
+#   1. New → Blueprint → conecte o repositório nordenimoveis/norden-crm-backend.
+#   2. O Render lê este arquivo e cria os 4 recursos.
+#   3. Preencha as variáveis marcadas como "sync: false" (segredos) no painel —
+#      são os tokens da Meta, Imobzi, Pusher etc. (DATABASE_URL e REDIS_URL são
+#      preenchidos automaticamente a partir dos recursos criados aqui).
+#
+# Obs.: o Redis usa maxmemoryPolicy "noeviction" — exigência do BullMQ, não mude.
+
+databases:
+  - name: crm-postgres
+    plan: starter          # troque para o plano desejado; "free" também funciona para testes
+    postgresMajorVersion: "16"
+
+services:
+  # ---------------------------------------------------------------- API
+  - type: web
+    name: crm-api
+    runtime: node
+    rootDir: backend/crm-leads-backend
+    plan: starter
+    buildCommand: npm install && npm run build
+    # Aplica o schema no banco (cria/atualiza tabelas) antes de cada deploy.
+    preDeployCommand: npx prisma db push
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: crm-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: crm-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true        # o Render gera um segredo forte automaticamente
+      - key: MAX_DAILY_MESSAGES
+        value: "100"
+      # --- Segredos: preencha no painel do Render (Environment) ---------
+      - { key: FRONTEND_URL, sync: false }          # URL do front na Vercel (ex.: https://crm.suaempresa.com)
+      - { key: IMOBZI_WEBHOOK_TOKEN, sync: false }
+      - { key: IMOBZI_API_BASE_URL, sync: false }   # https://api.imobzi.app/v1
+      - { key: IMOBZI_API_TOKEN, sync: false }
+      - { key: META_APP_SECRET, sync: false }
+      - { key: META_VERIFY_TOKEN, sync: false }
+      - { key: META_PAGE_ACCESS_TOKEN, sync: false }
+      - { key: META_PAGE_ID, sync: false }
+      - { key: META_IG_ACCOUNT_ID, sync: false }
+      - { key: WHATSAPP_TOKEN, sync: false }
+      - { key: WHATSAPP_PHONE_NUMBER_ID, sync: false }
+      - { key: PUSHER_APP_ID, sync: false }
+      - { key: PUSHER_KEY, sync: false }
+      - { key: PUSHER_SECRET, sync: false }
+      - { key: PUSHER_CLUSTER, sync: false }
+      - { key: ANTHROPIC_API_KEY, sync: false }     # opcional (IA)
+      - { key: VOYAGE_API_KEY, sync: false }         # opcional (embeddings da IA)
+      - { key: CLOUDINARY_CLOUD_NAME, sync: false }  # opcional (mídia de campanha)
+      - { key: CLOUDINARY_API_KEY, sync: false }
+      - { key: CLOUDINARY_API_SECRET, sync: false }
+
+  # ------------------------------------------------------------- Worker
+  - type: worker
+    name: crm-worker
+    runtime: node
+    rootDir: backend/crm-leads-backend
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: crm-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: crm-redis
+          property: connectionString
+      - key: MAX_DAILY_MESSAGES
+        value: "100"
+      # O worker precisa dos mesmos segredos da API para enviar mensagens.
+      - { key: META_PAGE_ACCESS_TOKEN, sync: false }
+      - { key: META_PAGE_ID, sync: false }
+      - { key: META_IG_ACCOUNT_ID, sync: false }
+      - { key: WHATSAPP_TOKEN, sync: false }
+      - { key: WHATSAPP_PHONE_NUMBER_ID, sync: false }
+      - { key: PUSHER_APP_ID, sync: false }
+      - { key: PUSHER_KEY, sync: false }
+      - { key: PUSHER_SECRET, sync: false }
+      - { key: PUSHER_CLUSTER, sync: false }
+      - { key: ANTHROPIC_API_KEY, sync: false }
+      - { key: VOYAGE_API_KEY, sync: false }
+      - { key: CLOUDINARY_CLOUD_NAME, sync: false }
+      - { key: CLOUDINARY_API_KEY, sync: false }
+      - { key: CLOUDINARY_API_SECRET, sync: false }
+
+  # -------------------------------------------------------------- Redis
+  - type: redis
+    name: crm-redis
+    plan: starter
+    maxmemoryPolicy: noeviction    # obrigatório para o BullMQ (não altere)
+    ipAllowList: []                # acesso só interno (API e worker), sem exposição externa
