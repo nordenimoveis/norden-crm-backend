@@ -4,14 +4,25 @@ import { env } from '@/config/env';
 /**
  * Cliente Pusher do lado do servidor. Único ponto do código que fala com a
  * API do Pusher — todos os disparos de evento passam pelas funções abaixo.
+ *
+ * O Pusher é OPCIONAL: se as credenciais não estiverem configuradas, o
+ * cliente fica `null` e todas as notificações viram no-op (o sistema roda
+ * normalmente, só sem atualização em tempo real). Isso evita que a falta de
+ * uma integração de conveniência derrube o servidor inteiro na subida.
  */
-export const pusher = new Pusher({
-  appId: env.PUSHER_APP_ID,
-  key: env.PUSHER_KEY,
-  secret: env.PUSHER_SECRET,
-  cluster: env.PUSHER_CLUSTER,
-  useTLS: true,
-});
+export const pusherConfigurado = Boolean(
+  env.PUSHER_APP_ID && env.PUSHER_KEY && env.PUSHER_SECRET && env.PUSHER_CLUSTER
+);
+
+export const pusher = pusherConfigurado
+  ? new Pusher({
+      appId: env.PUSHER_APP_ID as string,
+      key: env.PUSHER_KEY as string,
+      secret: env.PUSHER_SECRET as string,
+      cluster: env.PUSHER_CLUSTER as string,
+      useTLS: true,
+    })
+  : null;
 
 /** Canal único do board Kanban — todo usuário autenticado escuta este canal. */
 export const CANAL_KANBAN = 'private-kanban';
@@ -35,6 +46,7 @@ type LeadResumo = {
  * certo no board sem precisar buscar a lista inteira de novo.
  */
 export async function notificarLeadAtualizado(lead: LeadResumo) {
+  if (!pusher) return;
   await pusher.trigger(CANAL_KANBAN, 'lead_atualizado', { lead });
 }
 
@@ -53,6 +65,7 @@ type MensagemResumo = {
  * (para atualizar o badge/preview do card, mesmo com o chat fechado).
  */
 export async function notificarNovaMensagem(mensagem: MensagemResumo) {
+  if (!pusher) return;
   await Promise.all([
     pusher.trigger(canalDoLead(mensagem.leadId), 'nova_mensagem', { mensagem }),
     pusher.trigger(CANAL_KANBAN, 'mensagem_no_board', {
@@ -83,6 +96,7 @@ type ComentarioResumo = {
 
 /** Disparado quando um comentário novo chega (ou é respondido) num post. */
 export async function notificarComentario(comentario: ComentarioResumo) {
+  if (!pusher) return;
   await pusher.trigger(CANAL_COMENTARIOS, 'novo_comentario', { comentario });
 }
 
@@ -97,5 +111,6 @@ export async function notificarStatusMensagem(payload: {
   leadId: string;
   status: string;
 }) {
+  if (!pusher) return;
   await pusher.trigger(canalDoLead(payload.leadId), 'status_mensagem', payload);
 }
