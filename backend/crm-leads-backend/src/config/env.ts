@@ -28,6 +28,17 @@ const envSchema = z.object({
   WHATSAPP_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
 
+  // Omnichannel — Instagram Direct + Messenger + comentários de posts.
+  // O envio de DM e a resposta a comentário usam o MESMO META_PAGE_ACCESS_TOKEN
+  // (token da Página do Facebook conectada à conta comercial do Instagram).
+  // Estes ids identificam quais contas ouvimos/respondemos:
+  //  - META_PAGE_ID: id da Página do Facebook (Messenger + comentários no FB).
+  //  - META_IG_ACCOUNT_ID: id da conta comercial do Instagram (DM + comentários no IG).
+  // Sem eles o webhook continua funcionando (só registra), mas o envio de
+  // resposta fica indisponível para o canal correspondente.
+  META_PAGE_ID: z.string().optional(),
+  META_IG_ACCOUNT_ID: z.string().optional(),
+
   // Trava anti-ban: teto de mensagens automatizadas (cadência) disparadas por dia.
   // Comece conservador e aumente conforme o número ganha reputação no WhatsApp.
   MAX_DAILY_MESSAGES: z.coerce.number().int().positive().default(100),

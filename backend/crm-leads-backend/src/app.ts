@@ -9,6 +9,7 @@ import { leadsRoutes } from '@/modules/leads/leads.routes';
 import { usuariosRoutes } from '@/modules/usuarios/usuarios.routes';
 import { metaAdsRoutes } from '@/modules/meta-ads/meta-ads.routes';
 import { whatsappRoutes } from '@/modules/whatsapp/whatsapp.routes';
+import { metaMessagingRoutes } from '@/modules/meta-messaging/meta-messaging.routes';
 import { realtimeRoutes } from '@/modules/realtime/realtime.routes';
 import { imobziRoutes } from '@/modules/imobzi/imobzi.routes';
 import { quickRepliesRoutes } from '@/modules/quick-replies/quick-replies.routes';
@@ -48,6 +49,7 @@ export function buildApp() {
   app.register(usuariosRoutes, { prefix: '/api' });
   app.register(metaAdsRoutes); // sem prefixo /api — a URL do webhook deve ser previsível para configurar no Meta
   app.register(whatsappRoutes); // idem — já define seus próprios caminhos internamente
+  app.register(metaMessagingRoutes); // Instagram Direct + Messenger + comentários (webhook + API do painel)
   app.register(realtimeRoutes); // idem — /api/pusher/auth já definido internamente
   app.register(imobziRoutes); // idem — webhook ativo + importação da base legada
   app.register(quickRepliesRoutes, { prefix: '/api' });
