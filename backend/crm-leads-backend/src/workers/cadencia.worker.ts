@@ -53,6 +53,18 @@ const worker = new Worker<CadenciaJobPayload>(
     const lead = await prisma.lead.findUnique({ where: { id: leadId }, include: { corretor: true } });
     if (!lead) return;
 
+    // Cadência é exclusiva do WhatsApp (usa templates aprovados + número).
+    // Leads de Instagram/Messenger nunca entram em cadência, mas guardamos
+    // aqui por segurança: sem telefone não há como disparar template.
+    if (!lead.telefone) {
+      await prisma.leadCadenciaExecucao.update({
+        where: { id: execucaoId },
+        data: { status: 'cancelada', proximoJobId: null },
+      });
+      return;
+    }
+    const telefoneLead = lead.telefone;
+
     // Trava Anti-Ban: tenta reservar um slot no teto diário de MAX_DAILY_MESSAGES
     // ANTES de enviar. Se o teto já foi atingido, o passo NÃO avança — ele é
     // reagendado para a próxima janela comercial (amanhã 09h), mantendo a
@@ -97,7 +109,7 @@ const worker = new Worker<CadenciaJobPayload>(
       await whatsappService.enviarTemplate(
         leadId,
         {
-          telefone: lead.telefone,
+          telefone: telefoneLead,
           nomeTemplate: template.metaTemplateName,
           idioma: 'pt_BR',
           parametros,
@@ -215,6 +227,13 @@ const campanhaWorker = new Worker<CampanhaJobPayload>(
       await prisma.campanhaDisparoLead.update({
         where: { id: campanhaDisparoLeadId },
         data: { status: 'falhou', erro: 'Template sem nome aprovado pela Meta configurado' },
+      });
+    } else if (!destinatario.lead.telefone) {
+      // Disparo em massa é por WhatsApp — destinatário sem telefone
+      // (lead só de Instagram/Messenger) não pode receber template.
+      await prisma.campanhaDisparoLead.update({
+        where: { id: campanhaDisparoLeadId },
+        data: { status: 'falhou', erro: 'Lead sem telefone (canal social) — disparo WhatsApp indisponível' },
       });
     } else {
       try {

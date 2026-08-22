@@ -319,6 +319,9 @@ export class LeadsService {
         corretor: true,
         mensagens: { orderBy: { criadoEm: 'asc' }, include: { enviadaPorUsuario: true } },
         execucoesCadencia: true,
+        // Identidades por canal — permite ao chat saber por quais canais dá
+        // pra responder e exibir @username/foto do Instagram/Messenger.
+        contatosCanais: true,
       },
     });
 

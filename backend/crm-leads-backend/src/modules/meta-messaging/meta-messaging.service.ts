@@ -1,0 +1,434 @@
+import { PrismaClient, Canal, Prisma } from '@prisma/client';
+import { env } from '@/config/env';
+import {
+  notificarNovaMensagem,
+  notificarLeadAtualizado,
+  notificarComentario,
+} from '@/lib/pusher';
+import { incrementarScore } from '@/lib/score.service';
+import {
+  MetaMessagingPayload,
+  MessagingEvent,
+  CommentChange,
+  ListarComentariosQuery,
+} from './meta-messaging.schema';
+
+const GRAPH_API_VERSION = 'v19.0';
+const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
+
+/**
+ * Serviço da caixa de entrada omnichannel da Meta: Instagram Direct, Messenger
+ * e comentários de posts. Fala com a Graph API usando o token da Página
+ * (META_PAGE_ACCESS_TOKEN) — o MESMO token atende IG e Messenger, porque a
+ * conta comercial do Instagram é vinculada a uma Página do Facebook.
+ *
+ * Convenção do CRM: cada pessoa é um Lead; a identidade dela em cada canal
+ * (telefone/PSID/IGSID) vive em ContatoCanal. Uma DM de IG/Messenger nunca
+ * dispara cadência de WhatsApp — o atendimento é sempre humano.
+ */
+export class MetaMessagingService {
+  constructor(private prisma: PrismaClient) {}
+
+  // ---------------------------------------------------------------------------
+  // Graph API — chamadas de baixo nível
+  // ---------------------------------------------------------------------------
+  private get pageToken() {
+    return env.META_PAGE_ACCESS_TOKEN;
+  }
+
+  private async graph(path: string, body: Record<string, unknown>) {
+    if (!this.pageToken) {
+      throw new Error('META_PAGE_ACCESS_TOKEN não configurado');
+    }
+
+    const response = await fetch(`${GRAPH_BASE}/${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.pageToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const json = (await response.json()) as Record<string, unknown>;
+    if (!response.ok) {
+      throw new Error(`Graph API falhou (${path}): ${JSON.stringify(json)}`);
+    }
+    return json;
+  }
+
+  /** Busca nome/foto/@ de um usuário de canal. Best-effort: se a permissão não
+   * estiver liberada ou o id não resolver, retorna vazio sem quebrar o fluxo. */
+  private async buscarPerfil(
+    canal: Canal,
+    identidadeExterna: string
+  ): Promise<{ nome?: string; username?: string; fotoUrl?: string }> {
+    if (!this.pageToken) return {};
+    try {
+      const campos = canal === Canal.instagram ? 'name,username,profile_pic' : 'name,profile_pic';
+      const url = `${GRAPH_BASE}/${identidadeExterna}?fields=${campos}&access_token=${this.pageToken}`;
+      const resp = await fetch(url);
+      if (!resp.ok) return {};
+      const json = (await resp.json()) as {
+        name?: string;
+        username?: string;
+        profile_pic?: string;
+      };
+      return { nome: json.name, username: json.username, fotoUrl: json.profile_pic };
+    } catch {
+      return {};
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Webhook — entrada
+  // ---------------------------------------------------------------------------
+  async processarWebhook(payload: MetaMessagingPayload) {
+    // `object` diz o produto: "instagram" → DMs/comentários do Instagram;
+    // "page" → Messenger/comentários do Facebook. É o que decide o Canal.
+    const canalPadrao: Canal = payload.object === 'instagram' ? Canal.instagram : Canal.messenger;
+
+    for (const entry of payload.entry) {
+      const eventos = [...(entry.messaging ?? []), ...(entry.standby ?? [])];
+      for (const evento of eventos) {
+        await this.processarEventoMensagem(canalPadrao, entry.id, evento).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error('[meta-messaging] Falha ao processar DM:', err);
+        });
+      }
+
+      for (const change of entry.changes ?? []) {
+        await this.processarComentario(canalPadrao, change).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error('[meta-messaging] Falha ao processar comentário:', err);
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // DMs (Instagram Direct / Messenger)
+  // ---------------------------------------------------------------------------
+  private async processarEventoMensagem(canal: Canal, contaId: string, evento: MessagingEvent) {
+    const message = evento.message;
+    if (!message) return; // recibo de entrega/leitura — ignoramos
+
+    // is_echo = mensagem que nós mesmos enviamos, devolvida pelo webhook. Já
+    // registramos no envio, então ignoramos para não duplicar.
+    if (message.is_echo) return;
+
+    const identidadeExterna = evento.sender.id;
+    if (identidadeExterna === contaId) return; // proteção extra contra eco
+
+    const conteudo = this.extrairConteudo(message);
+
+    const { contatoCanal, lead } = await this.garantirContatoELead(canal, identidadeExterna);
+
+    const mensagem = await this.prisma.mensagem.create({
+      data: {
+        leadId: lead.id,
+        direcao: 'recebida',
+        canal,
+        conteudo,
+        status: 'entregue',
+        externalId: message.mid,
+        contatoCanalId: contatoCanal.id,
+      },
+    });
+
+    await this.prisma.contatoCanal.update({
+      where: { id: contatoCanal.id },
+      data: { ultimaRecebidaEm: new Date() },
+    });
+
+    await notificarNovaMensagem({
+      id: mensagem.id,
+      leadId: mensagem.leadId,
+      direcao: mensagem.direcao,
+      conteudo: mensagem.conteudo,
+      criadoEm: mensagem.criadoEm,
+      canal,
+    });
+
+    // Toda mensagem do cliente marca a conversa como precisando de humano e
+    // some no board como "aguardando resposta". IA automática fica de fora de
+    // IG/Messenger de propósito (a IA hoje só sabe responder por WhatsApp).
+    const leadAtualizado = await this.prisma.lead.update({
+      where: { id: lead.id },
+      data: { status: 'respondeu', atendimentoHumano: true },
+    });
+
+    await notificarLeadAtualizado({
+      id: leadAtualizado.id,
+      status: leadAtualizado.status,
+      atendimentoHumano: leadAtualizado.atendimentoHumano,
+      corretorId: leadAtualizado.corretorId,
+    });
+
+    incrementarScore(this.prisma, lead.id, 'mensagem_recebida').catch(() => {});
+  }
+
+  private extrairConteudo(message: NonNullable<MessagingEvent['message']>): string {
+    if (message.text) return message.text;
+    const anexo = message.attachments?.[0];
+    if (anexo) {
+      const tipo = anexo.type ?? 'arquivo';
+      return `[${tipo}]${anexo.payload?.url ? ` ${anexo.payload.url}` : ''}`;
+    }
+    return '[mensagem sem texto]';
+  }
+
+  /**
+   * Garante que exista um ContatoCanal (identidade nesse canal) e o Lead por
+   * trás dele. Se for a primeira vez que essa pessoa fala nesse canal, cria os
+   * dois e tenta enriquecer com nome/foto via Graph API.
+   */
+  private async garantirContatoELead(canal: Canal, identidadeExterna: string) {
+    const existente = await this.prisma.contatoCanal.findUnique({
+      where: { canal_identidadeExterna: { canal, identidadeExterna } },
+      include: { lead: true },
+    });
+    if (existente) {
+      return { contatoCanal: existente, lead: existente.lead };
+    }
+
+    const perfil = await this.buscarPerfil(canal, identidadeExterna);
+    const origem = canal === Canal.instagram ? 'instagram' : 'messenger';
+
+    const lead = await this.prisma.lead.create({
+      data: {
+        nome: perfil.nome ?? perfil.username ?? null,
+        canalPrincipal: canal,
+        origem,
+        atendimentoHumano: true,
+      },
+    });
+
+    const contatoCanal = await this.prisma.contatoCanal.create({
+      data: {
+        leadId: lead.id,
+        canal,
+        identidadeExterna,
+        nomeExibicao: perfil.nome ?? null,
+        username: perfil.username ?? null,
+        fotoUrl: perfil.fotoUrl ?? null,
+      },
+    });
+
+    await notificarLeadAtualizado({
+      id: lead.id,
+      status: lead.status,
+      atendimentoHumano: lead.atendimentoHumano,
+      corretorId: lead.corretorId,
+    });
+
+    return { contatoCanal, lead };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Envio de DM pelo painel
+  // ---------------------------------------------------------------------------
+  /**
+   * Envia uma resposta livre por Instagram Direct ou Messenger. Só funciona
+   * dentro da janela de 24h após a última mensagem do cliente (regra da Meta) —
+   * fora dela a Graph API rejeita e o erro é propagado para o painel.
+   */
+  async enviarDm(leadId: string, canal: Canal, texto: string, enviadaPorUsuarioId?: string) {
+    const contatoCanal = await this.prisma.contatoCanal.findFirst({
+      where: { leadId, canal },
+    });
+    if (!contatoCanal) {
+      throw new Error(`Lead não tem contato no canal ${canal}`);
+    }
+
+    // Messenger: POST /me/messages. Instagram: POST /{ig-account-id}/messages.
+    const path =
+      canal === Canal.instagram && env.META_IG_ACCOUNT_ID
+        ? `${env.META_IG_ACCOUNT_ID}/messages`
+        : 'me/messages';
+
+    const resposta = await this.graph(path, {
+      recipient: { id: contatoCanal.identidadeExterna },
+      messaging_type: 'RESPONSE',
+      message: { text: texto },
+    });
+
+    const externalId =
+      (resposta.message_id as string | undefined) ?? (resposta.mid as string | undefined);
+
+    // Humano assumiu — pausa a IA se estivesse ativa (consistente com WhatsApp).
+    if (enviadaPorUsuarioId) {
+      await this.prisma.lead.updateMany({
+        where: { id: leadId, statusIA: 'ativa' },
+        data: { statusIA: 'pausada_humano' },
+      });
+    }
+
+    const mensagem = await this.prisma.mensagem.create({
+      data: {
+        leadId,
+        direcao: 'enviada',
+        canal,
+        conteudo: texto,
+        status: externalId ? 'enviada' : 'falhou',
+        externalId,
+        contatoCanalId: contatoCanal.id,
+        enviadaPorUsuarioId,
+        enviadaEm: new Date(),
+      },
+      include: { enviadaPorUsuario: true },
+    });
+
+    await notificarNovaMensagem({
+      id: mensagem.id,
+      leadId: mensagem.leadId,
+      direcao: mensagem.direcao,
+      conteudo: mensagem.conteudo,
+      criadoEm: mensagem.criadoEm,
+      canal,
+    });
+
+    return mensagem;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Comentários de posts
+  // ---------------------------------------------------------------------------
+  private async processarComentario(canal: Canal, change: CommentChange) {
+    const v = change.value;
+    // Só nos interessa comentário. No FB o feed traz vários item types.
+    if (change.field === 'feed' && v.item && v.item !== 'comment') return;
+    // Ignora remoções/edições no processamento de "novo comentário".
+    if (v.verb && v.verb !== 'add') return;
+
+    const comentarioExternoId = v.id ?? v.comment_id;
+    if (!comentarioExternoId) return;
+
+    const texto = v.text ?? v.message ?? '';
+    const autorExternoId = v.from?.id;
+
+    // Se o autor é a própria conta, é a NOSSA resposta ecoada — não recria.
+    const nossaConta = canal === Canal.instagram ? env.META_IG_ACCOUNT_ID : env.META_PAGE_ID;
+    const ehNossa = !!autorExternoId && !!nossaConta && autorExternoId === nossaConta;
+
+    // Idempotência: se já registramos esse comentário, não duplica.
+    const jaExiste = await this.prisma.comentarioSocial.findUnique({
+      where: { comentarioExternoId },
+    });
+    if (jaExiste) return;
+
+    // Tenta casar o autor com um Lead que já conversou nesse canal.
+    let leadId: string | null = null;
+    if (autorExternoId && !ehNossa) {
+      const contato = await this.prisma.contatoCanal.findUnique({
+        where: { canal_identidadeExterna: { canal, identidadeExterna: autorExternoId } },
+      });
+      leadId = contato?.leadId ?? null;
+    }
+
+    const comentario = await this.prisma.comentarioSocial.create({
+      data: {
+        canal,
+        comentarioExternoId,
+        postId: v.post_id ?? v.media?.id ?? 'desconhecido',
+        parentId: v.parent_id ?? null,
+        permalink: v.permalink ?? null,
+        direcao: ehNossa ? 'enviado' : 'recebido',
+        autorExternoId: autorExternoId ?? null,
+        autorNome: v.from?.name ?? null,
+        autorUsername: v.from?.username ?? null,
+        texto,
+        respondido: ehNossa, // nossa própria resposta já entra respondida
+        leadId,
+        recebidoEm: new Date(),
+      },
+    });
+
+    await notificarComentario({
+      id: comentario.id,
+      canal: comentario.canal as 'instagram' | 'messenger',
+      postId: comentario.postId,
+      texto: comentario.texto,
+      autorNome: comentario.autorNome,
+      direcao: comentario.direcao,
+      respondido: comentario.respondido,
+      criadoEm: comentario.criadoEm,
+    });
+  }
+
+  /** Responde publicamente a um comentário — cria um comentário-filho na thread. */
+  async responderComentario(comentarioId: string, texto: string, usuarioId?: string) {
+    const comentario = await this.prisma.comentarioSocial.findUnique({
+      where: { id: comentarioId },
+    });
+    if (!comentario) throw new Error('Comentário não encontrado');
+
+    // IG usa /{comment-id}/replies; FB usa /{comment-id}/comments. Ambos
+    // aceitam { message }.
+    const sub = comentario.canal === Canal.instagram ? 'replies' : 'comments';
+    const resposta = await this.graph(`${comentario.comentarioExternoId}/${sub}`, {
+      message: texto,
+    });
+    const novoId = (resposta.id as string | undefined) ?? undefined;
+
+    await this.prisma.comentarioSocial.update({
+      where: { id: comentario.id },
+      data: { respondido: true, respondidoPorUsuarioId: usuarioId ?? null },
+    });
+
+    // Registra a nossa resposta como um comentário-filho (direcao enviado).
+    const filho = novoId
+      ? await this.prisma.comentarioSocial.create({
+          data: {
+            canal: comentario.canal,
+            comentarioExternoId: novoId,
+            postId: comentario.postId,
+            parentId: comentario.comentarioExternoId,
+            direcao: 'enviado',
+            texto,
+            respondido: true,
+            respondidoPorUsuarioId: usuarioId ?? null,
+            leadId: comentario.leadId,
+            recebidoEm: new Date(),
+          },
+        })
+      : null;
+
+    await notificarComentario({
+      id: comentario.id,
+      canal: comentario.canal as 'instagram' | 'messenger',
+      postId: comentario.postId,
+      texto: comentario.texto,
+      autorNome: comentario.autorNome,
+      direcao: comentario.direcao,
+      respondido: true,
+      criadoEm: comentario.criadoEm,
+    });
+
+    return { comentario: { ...comentario, respondido: true }, resposta: filho };
+  }
+
+  async listarComentarios(query: ListarComentariosQuery) {
+    const where: Prisma.ComentarioSocialWhereInput = {
+      direcao: 'recebido',
+    };
+    if (query.canal) where.canal = query.canal as Canal;
+    if (query.respondido !== undefined) where.respondido = query.respondido;
+    if (query.busca) {
+      where.OR = [
+        { texto: { contains: query.busca, mode: 'insensitive' } },
+        { autorNome: { contains: query.busca, mode: 'insensitive' } },
+        { autorUsername: { contains: query.busca, mode: 'insensitive' } },
+      ];
+    }
+
+    return this.prisma.comentarioSocial.findMany({
+      where,
+      orderBy: { criadoEm: 'desc' },
+      take: 100,
+      include: {
+        lead: { select: { id: true, nome: true } },
+      },
+    });
+  }
+}

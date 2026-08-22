@@ -2,14 +2,17 @@ import { PrismaClient } from '@prisma/client';
 import { CriarQuickReplyInput, AtualizarQuickReplyInput, BuscarQuickReplyQuery } from './quick-replies.schema';
 import { substituirVariaveis } from '@/lib/template-variaveis';
 import { WhatsappService } from '@/modules/whatsapp/whatsapp.service';
+import { MetaMessagingService } from '@/modules/meta-messaging/meta-messaging.service';
 
 export type UsuarioAutenticado = { sub: string; papel: 'gestor' | 'corretor' | 'admin' };
 
 export class QuickRepliesService {
   private whatsappService: WhatsappService;
+  private metaMessagingService: MetaMessagingService;
 
   constructor(private prisma: PrismaClient) {
     this.whatsappService = new WhatsappService(prisma);
+    this.metaMessagingService = new MetaMessagingService(prisma);
   }
 
   /**
@@ -98,6 +101,25 @@ export class QuickRepliesService {
       broker_name: lead.corretor?.nome ?? undefined,
     });
 
-    return this.whatsappService.enviarTexto(leadId, { telefone: lead.telefone, texto: textoFinal }, usuario.sub);
+    // Roteia pelo canal do lead: com telefone, vai por WhatsApp; sem telefone
+    // (lead de Instagram/Messenger), vai como DM pelo canal principal dele.
+    if (lead.telefone) {
+      return this.whatsappService.enviarTexto(
+        leadId,
+        { telefone: lead.telefone, texto: textoFinal },
+        usuario.sub
+      );
+    }
+
+    if (lead.canalPrincipal === 'instagram' || lead.canalPrincipal === 'messenger') {
+      return this.metaMessagingService.enviarDm(
+        leadId,
+        lead.canalPrincipal,
+        textoFinal,
+        usuario.sub
+      );
+    }
+
+    throw new Error('LEAD_SEM_CANAL_PARA_ENVIO');
   }
 }

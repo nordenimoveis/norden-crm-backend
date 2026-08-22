@@ -44,6 +44,7 @@ type MensagemResumo = {
   direcao: 'enviada' | 'recebida';
   conteudo: string;
   criadoEm: Date;
+  canal?: 'whatsapp' | 'instagram' | 'messenger';
 };
 
 /**
@@ -59,8 +60,30 @@ export async function notificarNovaMensagem(mensagem: MensagemResumo) {
       preview: mensagem.conteudo.slice(0, 80),
       direcao: mensagem.direcao,
       criadoEm: mensagem.criadoEm,
+      canal: mensagem.canal ?? 'whatsapp',
     }),
   ]);
+}
+
+/** Canal único da caixa de entrada de comentários — quem estiver na aba
+ * "Comentários" escuta este canal para ver novos comentários chegarem em
+ * tempo real, sem precisar de refresh. */
+export const CANAL_COMENTARIOS = 'private-comentarios';
+
+type ComentarioResumo = {
+  id: string;
+  canal: 'instagram' | 'messenger';
+  postId: string;
+  texto: string;
+  autorNome: string | null;
+  direcao: 'recebido' | 'enviado';
+  respondido: boolean;
+  criadoEm: Date;
+};
+
+/** Disparado quando um comentário novo chega (ou é respondido) num post. */
+export async function notificarComentario(comentario: ComentarioResumo) {
+  await pusher.trigger(CANAL_COMENTARIOS, 'novo_comentario', { comentario });
 }
 
 /**

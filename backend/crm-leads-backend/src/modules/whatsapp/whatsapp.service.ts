@@ -225,7 +225,9 @@ export class WhatsappService {
         const respostaIA = await this.iaService.gerarRespostaParaLead(lead.id, texto);
 
         if (respostaIA.trim()) {
-          await this.enviarTexto(lead.id, { telefone: lead.telefone, texto: respostaIA });
+          // telefoneOrigem é o número que acabou de escrever — sempre presente
+          // aqui (o lead foi encontrado justamente por ele).
+          await this.enviarTexto(lead.id, { telefone: telefoneOrigem, texto: respostaIA });
         }
 
         const leadAtualizado = await this.prisma.lead.update({
