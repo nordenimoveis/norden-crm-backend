@@ -1,9 +1,23 @@
 import { PrismaClient, Prisma } from '@prisma/client';
-import { FiltroPublico, CriarCampanhaDisparoInput, AtualizarCampanhaDisparoInput } from './campanhas-disparo.schema';
-import { enfileirarDestinatarios } from '@/queues/campanha-disparo.queue';
+import {
+  FiltroPublico,
+  CriarCampanhaDisparoInput,
+  AtualizarCampanhaDisparoInput,
+  EnviarTesteInput,
+} from './campanhas-disparo.schema';
+import {
+  enfileirarDestinatarios,
+  agendarInicioCampanha,
+  cancelarInicioCampanha,
+} from '@/queues/campanha-disparo.queue';
+import { WhatsappService } from '@/modules/whatsapp/whatsapp.service';
 
 export class CampanhasDisparoService {
-  constructor(private prisma: PrismaClient) {}
+  private whatsappService: WhatsappService;
+
+  constructor(private prisma: PrismaClient) {
+    this.whatsappService = new WhatsappService(prisma);
+  }
 
   /** Monta o `where` do Prisma a partir do filtro de público — mesma lógica de "Meus Leads". */
   private construirWhere(filtro: FiltroPublico): Prisma.LeadWhereInput {
@@ -70,6 +84,7 @@ export class CampanhasDisparoService {
         nome: input.nome,
         templateMensagemId: input.templateMensagemId,
         midiaUrl: input.midiaUrl,
+        parametros: (input.parametros ?? undefined) as Prisma.InputJsonValue | undefined,
         criadoPorUsuarioId: usuarioId,
         destinatarios: {
           create: leadsAlvo.map((lead) => ({ leadId: lead.id })),
@@ -77,6 +92,32 @@ export class CampanhasDisparoService {
       },
       include: { templateMensagem: true, _count: { select: { destinatarios: true } } },
     });
+  }
+
+  /**
+   * Envio TESTE: manda o template para UM número (o seu), sem criar campanha
+   * nem tocar no público. Serve para conferir texto/mídia/variáveis antes do
+   * disparo real. Aplica as mesmas travas de coerência template x mídia.
+   */
+  async enviarTeste(input: EnviarTesteInput) {
+    const template = await this.prisma.templateMensagem.findUnique({
+      where: { id: input.templateMensagemId },
+    });
+    if (!template) throw new Error('TEMPLATE_NAO_ENCONTRADO');
+    if (!template.aprovadoMeta || !template.metaTemplateName) throw new Error('TEMPLATE_NAO_APROVADO');
+    if (template.midiaTipo && !input.midiaUrl) throw new Error('MIDIA_OBRIGATORIA');
+    if (!template.midiaTipo && input.midiaUrl) throw new Error('TEMPLATE_SEM_CABECALHO_MIDIA');
+
+    const messageId = await this.whatsappService.enviarTemplateTeste({
+      telefone: input.telefone,
+      nomeTemplate: template.metaTemplateName,
+      idioma: template.idioma,
+      parametros: input.parametros,
+      midiaUrl: input.midiaUrl,
+      midiaTipo: template.midiaTipo ?? undefined,
+    });
+
+    return { enviado: Boolean(messageId), messageId };
   }
 
   async listar() {
@@ -137,7 +178,17 @@ export class CampanhasDisparoService {
       if (!template.aprovadoMeta) throw new Error('TEMPLATE_NAO_APROVADO');
     }
 
-    return this.prisma.campanhaDisparo.update({ where: { id }, data: input });
+    const data: Prisma.CampanhaDisparoUpdateInput = {};
+    if (input.nome !== undefined) data.nome = input.nome;
+    if (input.templateMensagemId !== undefined) {
+      data.templateMensagem = { connect: { id: input.templateMensagemId } };
+    }
+    if (input.midiaUrl !== undefined) data.midiaUrl = input.midiaUrl;
+    if (input.parametros !== undefined) {
+      data.parametros = input.parametros as Prisma.InputJsonValue;
+    }
+
+    return this.prisma.campanhaDisparo.update({ where: { id }, data });
   }
 
   /** Marca como "pronta" — sinaliza que a revisão terminou (o motor de disparo, Peça 4, consome esse status). */
@@ -155,13 +206,26 @@ export class CampanhasDisparoService {
    * O worker é quem realmente dispara as mensagens e atualiza o progresso.
    */
   async iniciarEnvio(id: string) {
+    const campanha = await this.prisma.campanhaDisparo.findUnique({ where: { id } });
+    if (!campanha) throw new Error('CAMPANHA_NAO_ENCONTRADA');
+    // Aceita 'pronta' (envio manual agora) OU 'agendada' (o worker chama isto
+    // na hora marcada). Qualquer outro status não pode iniciar disparo.
+    if (campanha.status !== 'pronta' && campanha.status !== 'agendada') {
+      throw new Error('CAMPANHA_NAO_ESTA_PRONTA');
+    }
+    return this.dispararAgora(id);
+  }
+
+  /**
+   * Núcleo do disparo (compartilhado pelo envio manual e pelo agendado):
+   * valida o template, marca 'enviando' e enfileira os destinatários.
+   */
+  private async dispararAgora(id: string) {
     const campanha = await this.prisma.campanhaDisparo.findUnique({
       where: { id },
       include: { templateMensagem: true },
     });
-
     if (!campanha) throw new Error('CAMPANHA_NAO_ENCONTRADA');
-    if (campanha.status !== 'pronta') throw new Error('CAMPANHA_NAO_ESTA_PRONTA');
     if (!campanha.templateMensagem.aprovadoMeta || !campanha.templateMensagem.metaTemplateName) {
       throw new Error('TEMPLATE_SEM_NOME_META');
     }
@@ -170,15 +234,61 @@ export class CampanhasDisparoService {
       where: { campanhaDisparoId: id, status: 'pendente' },
       select: { id: true },
     });
-
     if (destinatarios.length === 0) throw new Error('PUBLICO_VAZIO');
 
-    await this.prisma.campanhaDisparo.update({ where: { id }, data: { status: 'enviando' } });
+    await this.prisma.campanhaDisparo.update({
+      where: { id },
+      data: { status: 'enviando', jobAgendamentoId: null },
+    });
 
     await enfileirarDestinatarios(
       id,
       destinatarios.map((d) => d.id)
     );
+
+    return this.buscarPorId(id);
+  }
+
+  /** Chamado pelo worker quando o job de início agendado dispara. */
+  async dispararAgendada(id: string) {
+    const campanha = await this.prisma.campanhaDisparo.findUnique({ where: { id } });
+    if (!campanha || campanha.status !== 'agendada') return; // cancelada/alterada nesse meio-tempo
+    await this.dispararAgora(id);
+  }
+
+  /**
+   * Agenda o disparo para uma data/hora futura. A campanha precisa estar
+   * 'pronta' (público já congelado e revisado). Cria um job atrasado e guarda
+   * o id para permitir cancelar.
+   */
+  async agendar(id: string, agendadoPara: Date) {
+    const campanha = await this.prisma.campanhaDisparo.findUnique({ where: { id } });
+    if (!campanha) throw new Error('CAMPANHA_NAO_ENCONTRADA');
+    if (campanha.status !== 'pronta') throw new Error('CAMPANHA_NAO_ESTA_PRONTA');
+    if (agendadoPara.getTime() <= Date.now()) throw new Error('DATA_NO_PASSADO');
+
+    const jobId = await agendarInicioCampanha(id, agendadoPara);
+
+    await this.prisma.campanhaDisparo.update({
+      where: { id },
+      data: { status: 'agendada', agendadoPara, jobAgendamentoId: jobId },
+    });
+
+    return this.buscarPorId(id);
+  }
+
+  /** Cancela um agendamento (volta para 'pronta'). */
+  async cancelarAgendamento(id: string) {
+    const campanha = await this.prisma.campanhaDisparo.findUnique({ where: { id } });
+    if (!campanha) throw new Error('CAMPANHA_NAO_ENCONTRADA');
+    if (campanha.status !== 'agendada') throw new Error('CAMPANHA_NAO_AGENDADA');
+
+    if (campanha.jobAgendamentoId) await cancelarInicioCampanha(campanha.jobAgendamentoId);
+
+    await this.prisma.campanhaDisparo.update({
+      where: { id },
+      data: { status: 'pronta', agendadoPara: null, jobAgendamentoId: null },
+    });
 
     return this.buscarPorId(id);
   }

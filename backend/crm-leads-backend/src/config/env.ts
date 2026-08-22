@@ -27,6 +27,9 @@ const envSchema = z.object({
   META_PAGE_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  // ID da conta WhatsApp Business (WABA) — necessário para SINCRONIZAR os
+  // templates aprovados direto da Meta (Graph API /{WABA_ID}/message_templates).
+  WHATSAPP_WABA_ID: z.string().optional(),
 
   // Omnichannel — Instagram Direct + Messenger + comentários de posts.
   // O envio de DM e a resposta a comentário usam o MESMO META_PAGE_ACCESS_TOKEN

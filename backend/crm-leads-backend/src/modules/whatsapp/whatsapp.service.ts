@@ -79,7 +79,8 @@ export class WhatsappService {
    * Envia um template pré-aprovado. Usado pela cadência automática — nesse
    * caso `enviadaPorUsuarioId` fica de fora (null = mensagem automática).
    */
-  async enviarTemplate(leadId: string, input: EnviarTemplateInput, templateId?: string) {
+  /** Monta os componentes (cabeçalho de mídia + corpo) do payload de template. */
+  private montarComponentesTemplate(input: EnviarTemplateInput): Record<string, unknown>[] {
     const componentes: Record<string, unknown>[] = [];
 
     // Cabeçalho de mídia entra ANTES do corpo — é assim que a API do
@@ -103,6 +104,12 @@ export class WhatsappService {
       });
     }
 
+    return componentes;
+  }
+
+  async enviarTemplate(leadId: string, input: EnviarTemplateInput, templateId?: string) {
+    const componentes = this.montarComponentesTemplate(input);
+
     const whatsappMessageId = await this.chamarApi({
       messaging_product: 'whatsapp',
       to: input.telefone,
@@ -120,6 +127,25 @@ export class WhatsappService {
       whatsappMessageId,
       templateId
     );
+  }
+
+  /**
+   * Envio TESTE de um template para um número avulso — NÃO registra Mensagem
+   * nem exige um lead. Usado pelo compositor de campanha ("enviar teste para o
+   * meu WhatsApp" antes de disparar para o público inteiro).
+   */
+  async enviarTemplateTeste(input: EnviarTemplateInput): Promise<string | undefined> {
+    const componentes = this.montarComponentesTemplate(input);
+    return this.chamarApi({
+      messaging_product: 'whatsapp',
+      to: input.telefone,
+      type: 'template',
+      template: {
+        name: input.nomeTemplate,
+        language: { code: input.idioma },
+        components: componentes.length > 0 ? componentes : undefined,
+      },
+    });
   }
 
   private async registrarMensagemEnviada(

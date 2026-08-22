@@ -2,8 +2,9 @@ import { Worker } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
 import { redisConnection } from '@/lib/redis';
 import { CADENCIA_QUEUE_NAME, CadenciaJobPayload, agendarPasso, agendarParaData } from '@/queues/cadencia.queue';
-import { CAMPANHA_QUEUE_NAME, CampanhaJobPayload } from '@/queues/campanha-disparo.queue';
+import { CAMPANHA_QUEUE_NAME, CampanhaJobPayload, JOB_INICIAR_AGENDADA } from '@/queues/campanha-disparo.queue';
 import { campanhaQueue } from '@/queues/campanha-disparo.queue';
+import { CampanhasDisparoService } from '@/modules/campanhas-disparo/campanhas-disparo.service';
 import { WhatsappService } from '@/modules/whatsapp/whatsapp.service';
 import { reservarSlotDeEnvio } from '@/lib/limite-diario';
 import { proximaJanelaComercialAmanha } from '@/utils/horario-comercial';
@@ -186,6 +187,13 @@ const campanhaWorker = new Worker<CampanhaJobPayload>(
   async (job) => {
     const { campanhaDisparoId, campanhaDisparoLeadId } = job.data;
 
+    // Job de INÍCIO de campanha agendada: na hora marcada, dá o start (que
+    // então enfileira os destinatários individualmente, jobs 'disparar-campanha-lead').
+    if (job.name === JOB_INICIAR_AGENDADA) {
+      await new CampanhasDisparoService(prisma).dispararAgendada(campanhaDisparoId);
+      return;
+    }
+
     const destinatario = await prisma.campanhaDisparoLead.findUnique({
       where: { id: campanhaDisparoLeadId },
       include: {
@@ -237,13 +245,21 @@ const campanhaWorker = new Worker<CampanhaJobPayload>(
       });
     } else {
       try {
+        // Variáveis do template: usa as que foram preenchidas no compositor
+        // (campanha.parametros), com fallback para o nome do lead.
+        const paramsCampanha = Array.isArray(destinatario.campanhaDisparo.parametros)
+          ? (destinatario.campanhaDisparo.parametros as string[])
+          : undefined;
+        const parametros =
+          paramsCampanha ?? (destinatario.lead.nome ? [destinatario.lead.nome] : undefined);
+
         await whatsappService.enviarTemplate(
           destinatario.leadId,
           {
             telefone: destinatario.lead.telefone,
             nomeTemplate: template.metaTemplateName,
-            idioma: 'pt_BR',
-            parametros: destinatario.lead.nome ? [destinatario.lead.nome] : undefined,
+            idioma: template.idioma,
+            parametros,
             // Mídia é da CAMPANHA (midiaUrl), mas o TIPO vem do TEMPLATE
             // (midiaTipo) — é o template aprovado que define se o cabeçalho
             // é imagem/vídeo/documento, a campanha só fornece qual arquivo.

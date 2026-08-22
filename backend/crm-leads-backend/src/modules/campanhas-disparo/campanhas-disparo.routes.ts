@@ -6,6 +6,8 @@ import {
   criarCampanhaDisparoSchema,
   atualizarCampanhaDisparoSchema,
   filtroPublicoSchema,
+  enviarTesteSchema,
+  agendarSchema,
 } from './campanhas-disparo.schema';
 
 const MENSAGENS_ERRO: Record<string, { status: number; message: string }> = {
@@ -22,6 +24,8 @@ const MENSAGENS_ERRO: Record<string, { status: number; message: string }> = {
   CAMPANHA_NAO_ENCONTRADA: { status: 404, message: 'Campanha não encontrada' },
   CAMPANHA_NAO_EDITAVEL: { status: 400, message: 'Só é possível editar/apagar campanhas em rascunho' },
   CAMPANHA_NAO_ESTA_PRONTA: { status: 400, message: 'A campanha precisa estar "pronta para envio" antes de iniciar o disparo' },
+  CAMPANHA_NAO_AGENDADA: { status: 400, message: 'Essa campanha não está agendada' },
+  DATA_NO_PASSADO: { status: 400, message: 'A data/hora do agendamento precisa ser no futuro' },
   MIDIA_OBRIGATORIA: {
     status: 400,
     message: 'Esse template tem cabeçalho de mídia — anexe uma imagem/vídeo/documento antes de criar a campanha',
@@ -131,6 +135,40 @@ export async function campanhasDisparoRoutes(app: FastifyInstance) {
 
       try {
         const campanha = await service.iniciarEnvio(id);
+        return reply.send(campanha);
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
+    });
+
+    // Envio TESTE — para um número, sem público. Não precisa de campanha salva.
+    protectedRoutes.post('/api/campanhas-disparo/enviar-teste', async (request, reply) => {
+      const body = enviarTesteSchema.parse(request.body);
+      try {
+        const resultado = await service.enviarTeste(body);
+        return reply.send(resultado);
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
+    });
+
+    // Agendar o disparo para uma data/hora futura.
+    protectedRoutes.post('/api/campanhas-disparo/:id/agendar', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = agendarSchema.parse(request.body);
+      try {
+        const campanha = await service.agendar(id, new Date(body.agendadoPara));
+        return reply.send(campanha);
+      } catch (err) {
+        return tratarErro(err, reply);
+      }
+    });
+
+    // Cancelar um agendamento (volta a campanha para "pronta").
+    protectedRoutes.post('/api/campanhas-disparo/:id/cancelar-agendamento', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      try {
+        const campanha = await service.cancelarAgendamento(id);
         return reply.send(campanha);
       } catch (err) {
         return tratarErro(err, reply);

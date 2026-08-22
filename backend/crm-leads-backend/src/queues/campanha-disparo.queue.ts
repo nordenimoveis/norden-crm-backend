@@ -6,8 +6,39 @@ export const CAMPANHA_QUEUE_NAME = 'campanha-disparo';
 
 export type CampanhaJobPayload = {
   campanhaDisparoId: string;
+  // Preenchido nos jobs por-destinatário ('disparar-campanha-lead'); vazio no
+  // job de início agendado ('iniciar-campanha-agendada').
   campanhaDisparoLeadId: string;
 };
+
+// Nome do job que dá o "start" numa campanha agendada, no horário marcado.
+export const JOB_INICIAR_AGENDADA = 'iniciar-campanha-agendada';
+
+/**
+ * Agenda o INÍCIO de uma campanha para uma data/hora futura. Quando o job
+ * dispara, o worker chama o motor de disparo (que aí enfileira cada
+ * destinatário normalmente). Retorna o jobId, guardado na campanha para
+ * permitir cancelar o agendamento antes da hora.
+ */
+export async function agendarInicioCampanha(
+  campanhaDisparoId: string,
+  quando: Date
+): Promise<string> {
+  const delayMs = Math.max(0, quando.getTime() - Date.now());
+  const jobId = `campanha-inicio-${campanhaDisparoId}`;
+  await campanhaQueue.add(
+    JOB_INICIAR_AGENDADA,
+    { campanhaDisparoId, campanhaDisparoLeadId: '' },
+    { delay: delayMs, jobId }
+  );
+  return jobId;
+}
+
+/** Remove um agendamento de início ainda não disparado. */
+export async function cancelarInicioCampanha(jobId: string): Promise<void> {
+  const job = await campanhaQueue.getJob(jobId);
+  if (job) await job.remove();
+}
 
 export const campanhaQueue = new Queue<CampanhaJobPayload>(CAMPANHA_QUEUE_NAME, {
   connection: redisConnection,

@@ -162,6 +162,7 @@ model Campanha {
 enum CampanhaDisparoStatus {
   rascunho // em edição, ainda não confirmada
   pronta // pronta para envio, aguardando o motor de disparo (Peça 4)
+  agendada // agendada para disparar em uma data/hora futura
   enviando // motor de disparo em progresso
   concluida
   cancelada
@@ -185,6 +186,17 @@ model CampanhaDisparo {
   // URL real (Cloudinary) da mídia anexada — só relevante se o template
   // escolhido tiver templateMensagem.midiaTipo definido.
   midiaUrl           String?               @map("midia_url")
+
+  // Valores das variáveis {{1}}, {{2}}... preenchidos no compositor. Guardado
+  // como JSON (array de strings na ordem) para reconstruir o preview e para
+  // o worker montar os parâmetros no envio.
+  parametros Json?
+
+  // Quando o disparo deve começar (status 'agendada'). Null = envio imediato.
+  agendadoPara     DateTime? @map("agendado_para")
+  // Id do job atrasado no BullMQ que dispara o início — usado para cancelar
+  // um agendamento antes da hora.
+  jobAgendamentoId String?   @map("job_agendamento_id")
 
   criadoPorUsuarioId String  @map("criado_por_usuario_id")
   criadoPor          Usuario @relation("CampanhaDisparoCriadaPor", fields: [criadoPorUsuarioId], references: [id])
@@ -338,7 +350,23 @@ model TemplateMensagem {
   // cabeçalho de mídia (imagem/vídeo/documento)? null = template só-texto.
   // Isso é fixo por template — precisa bater com o que foi aprovado lá.
   midiaTipo        TipoMidiaTemplate? @map("midia_tipo")
-  criadoEm         DateTime           @default(now()) @map("criado_em")
+
+  // --- Metadados do template na Meta (preenchidos pela sincronização) -----
+  // Idioma aprovado (ex.: pt_BR) — usado no envio.
+  idioma       String  @default("pt_BR")
+  // Quantas variáveis {{1}}, {{2}}... o corpo tem — o compositor gera um
+  // campo de preenchimento para cada uma e monta o preview ao vivo.
+  numVariaveis Int     @default(0) @map("num_variaveis")
+  // Categoria da Meta (MARKETING / UTILITY / AUTHENTICATION), quando conhecida.
+  categoria    String?
+  // Status bruto vindo da Meta (APPROVED / PENDING / REJECTED). aprovadoMeta
+  // é derivado disto, mas guardamos o cru para exibir no painel.
+  metaStatus   String? @map("meta_status")
+  // Texto do rodapé aprovado (opcional) — só para exibir no preview.
+  rodape       String?
+
+  criadoEm     DateTime @default(now()) @map("criado_em")
+  atualizadoEm DateTime @default(now()) @updatedAt @map("atualizado_em")
 
   passos           CadenciaPasso[]
   mensagens        Mensagem[]
