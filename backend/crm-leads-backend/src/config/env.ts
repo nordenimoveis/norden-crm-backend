@@ -45,10 +45,14 @@ const envSchema = z.object({
 
   // Pusher — tempo real do painel (Kanban + chat). Plano gratuito é suficiente
   // para o volume de uma imobiliária boutique.
-  PUSHER_APP_ID: z.string().min(1, 'PUSHER_APP_ID é obrigatória'),
-  PUSHER_KEY: z.string().min(1, 'PUSHER_KEY é obrigatória'),
-  PUSHER_SECRET: z.string().min(1, 'PUSHER_SECRET é obrigatória'),
-  PUSHER_CLUSTER: z.string().min(1, 'PUSHER_CLUSTER é obrigatória'),
+  // OPCIONAIS: sem elas o sistema sobe normalmente, só o tempo real fica
+  // desligado (o painel atualiza ao recarregar a página, em vez de na hora).
+  // Fortemente recomendado configurar em produção para a caixa de entrada
+  // ficar "ao vivo".
+  PUSHER_APP_ID: z.string().optional(),
+  PUSHER_KEY: z.string().optional(),
+  PUSHER_SECRET: z.string().optional(),
+  PUSHER_CLUSTER: z.string().optional(),
 
   // URL do front-end (Vercel) para restringir o CORS em produção. Sem essa
   // variável, o CORS aceita qualquer origem (razoável em desenvolvimento,

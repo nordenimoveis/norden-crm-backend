@@ -18,6 +18,12 @@ export async function realtimeRoutes(app: FastifyInstance) {
     protectedRoutes.addHook('preHandler', app.authenticate);
 
     protectedRoutes.post('/api/pusher/auth', async (request, reply) => {
+      // Pusher opcional: sem credenciais configuradas não há canal para
+      // autorizar — o front simplesmente não terá tempo real.
+      if (!pusher) {
+        return reply.code(503).send({ message: 'Tempo real (Pusher) não configurado' });
+      }
+
       const body = request.body as { socket_id: string; channel_name: string };
       const { socket_id: socketId, channel_name: channelName } = body;
 
