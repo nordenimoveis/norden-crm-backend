@@ -260,6 +260,9 @@ const campanhaWorker = new Worker<CampanhaJobPayload>(
             nomeTemplate: template.metaTemplateName,
             idioma: template.idioma,
             parametros,
+            nomesVariaveis: Array.isArray(template.variaveis)
+              ? (template.variaveis as string[])
+              : undefined,
             // Mídia é da CAMPANHA (midiaUrl), mas o TIPO vem do TEMPLATE
             // (midiaTipo) — é o template aprovado que define se o cabeçalho
             // é imagem/vídeo/documento, a campanha só fornece qual arquivo.

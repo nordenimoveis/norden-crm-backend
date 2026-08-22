@@ -58,6 +58,9 @@ export const enviarTemplateSchema = z.object({
   nomeTemplate: z.string().min(1),
   idioma: z.string().default('pt_BR'),
   parametros: z.array(z.string()).optional(),
+  // Nomes das variáveis, na MESMA ordem de `parametros`. Quando presentes e
+  // não-numéricos, o corpo é enviado no formato NOMEADO da Meta (parameter_name).
+  nomesVariaveis: z.array(z.string()).optional(),
   // Cabeçalho de mídia — só usado quando o template aprovado na Meta tem um
   // header do tipo IMAGE/VIDEO/DOCUMENT configurado.
   midiaUrl: z.string().url().optional(),

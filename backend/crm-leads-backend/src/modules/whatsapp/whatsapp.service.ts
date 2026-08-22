@@ -97,10 +97,20 @@ export class WhatsappService {
       });
     }
 
-    if (input.parametros) {
+    if (input.parametros && input.parametros.length > 0) {
+      // Se o template usa variáveis NOMEADAS (nomes não-numéricos), a Meta
+      // exige `parameter_name` em cada parâmetro. Para posicionais ({{1}}),
+      // envia sem nome (formato clássico).
+      const nomes = input.nomesVariaveis;
+      const nomeado = Boolean(nomes && nomes.some((n) => !/^\d+$/.test(n)));
+
       componentes.push({
         type: 'body',
-        parameters: input.parametros.map((texto) => ({ type: 'text', text: texto })),
+        parameters: input.parametros.map((texto, i) =>
+          nomeado && nomes?.[i]
+            ? { type: 'text', parameter_name: nomes[i], text: texto }
+            : { type: 'text', text: texto }
+        ),
       });
     }
 

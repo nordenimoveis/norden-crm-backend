@@ -354,9 +354,12 @@ model TemplateMensagem {
   // --- Metadados do template na Meta (preenchidos pela sincronização) -----
   // Idioma aprovado (ex.: pt_BR) — usado no envio.
   idioma       String  @default("pt_BR")
-  // Quantas variáveis {{1}}, {{2}}... o corpo tem — o compositor gera um
-  // campo de preenchimento para cada uma e monta o preview ao vivo.
+  // Quantas variáveis o corpo tem — o compositor gera um campo por variável.
   numVariaveis Int     @default(0) @map("num_variaveis")
+  // Identificadores das variáveis, na ordem de aparição. Posicionais viram
+  // ["1","2",...]; NOMEADAS (padrão novo da Meta) viram os nomes
+  // (["nome_cliente","bairro_imovel"]). Decide o formato do envio.
+  variaveis    Json?
   // Categoria da Meta (MARKETING / UTILITY / AUTHENTICATION), quando conhecida.
   categoria    String?
   // Status bruto vindo da Meta (APPROVED / PENDING / REJECTED). aprovadoMeta
