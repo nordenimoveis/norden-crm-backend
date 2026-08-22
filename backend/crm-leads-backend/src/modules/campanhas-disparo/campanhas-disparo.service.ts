@@ -113,6 +113,9 @@ export class CampanhasDisparoService {
       nomeTemplate: template.metaTemplateName,
       idioma: template.idioma,
       parametros: input.parametros,
+      nomesVariaveis: Array.isArray(template.variaveis)
+        ? (template.variaveis as string[])
+        : undefined,
       midiaUrl: input.midiaUrl,
       midiaTipo: template.midiaTipo ?? undefined,
     });

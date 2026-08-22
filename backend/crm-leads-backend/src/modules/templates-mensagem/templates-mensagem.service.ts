@@ -33,10 +33,18 @@ export class TemplatesMensagemService {
     }
   }
 
-  /** Conta quantas variáveis posicionais {{1}}, {{2}}... o corpo usa (maior índice). */
-  private contarVariaveis(texto: string): number {
-    const matches = [...texto.matchAll(/\{\{\s*(\d+)\s*\}\}/g)];
-    return matches.reduce((max, m) => Math.max(max, Number(m[1])), 0);
+  /**
+   * Extrai os identificadores das variáveis do corpo, na ordem de aparição
+   * (sem repetir). Cobre os DOIS formatos da Meta: posicionais {{1}}, {{2}}
+   * e NOMEADAS {{nome_cliente}}, {{bairro_imovel}}.
+   */
+  private extrairVariaveis(texto: string): string[] {
+    const ordem: string[] = [];
+    for (const m of texto.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)) {
+      const id = m[1];
+      if (!ordem.includes(id)) ordem.push(id);
+    }
+    return ordem;
   }
 
   /**
@@ -77,6 +85,7 @@ export class TemplatesMensagemService {
       const footer = tpl.components?.find((c) => c.type === 'FOOTER');
 
       const conteudo = body?.text ?? '';
+      const variaveis = this.extrairVariaveis(conteudo);
       const dados = {
         nome: tpl.name,
         conteudo,
@@ -84,7 +93,8 @@ export class TemplatesMensagemService {
         aprovadoMeta: tpl.status === 'APPROVED',
         midiaTipo: this.mapearMidia(header?.format),
         idioma: tpl.language,
-        numVariaveis: this.contarVariaveis(conteudo),
+        numVariaveis: variaveis.length,
+        variaveis,
         categoria: tpl.category ?? null,
         metaStatus: tpl.status,
         rodape: footer?.text ?? null,
