@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { pusher, CANAL_KANBAN } from '@/lib/pusher';
+import { pusher, CANAL_KANBAN, CANAL_COMENTARIOS } from '@/lib/pusher';
 
 /**
  * O Pusher exige que canais privados (prefixo "private-") sejam autorizados
@@ -21,7 +21,9 @@ export async function realtimeRoutes(app: FastifyInstance) {
       const body = request.body as { socket_id: string; channel_name: string };
       const { socket_id: socketId, channel_name: channelName } = body;
 
-      if (channelName === CANAL_KANBAN) {
+      // Board e caixa de comentários: qualquer usuário autenticado pode
+      // assinar (mesma régua do private-kanban).
+      if (channelName === CANAL_KANBAN || channelName === CANAL_COMENTARIOS) {
         const auth = pusher.authorizeChannel(socketId, channelName);
         return reply.send(auth);
       }
