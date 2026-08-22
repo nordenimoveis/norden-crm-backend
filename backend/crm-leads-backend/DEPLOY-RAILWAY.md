@@ -19,7 +19,9 @@ o mesmo repositório, só com um comando de início diferente.
 1. **+ New → GitHub Repo →** selecione `norden-crm-backend`.
 2. Nas **Settings** do serviço:
    - **Root Directory:** `backend/crm-leads-backend`  ← essencial (o app é aninhado).
-   - O Railway detecta o `railway.json` (build + `prisma db push` + start + healthcheck).
+   - O Railway detecta o `railway.json` (build + `prisma db push` no pre-deploy).
+   - **Custom Start Command:** `npm run start` (comando da API).
+   - **Health Check Path:** `/health` (opcional, recomendado só para a API).
 3. Em **Variables**, adicione (as duas primeiras são referências aos bancos):
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
    - `REDIS_URL` = `${{Redis.REDIS_URL}}`
@@ -40,7 +42,10 @@ o mesmo repositório, só com um comando de início diferente.
 2. Nas **Settings** desse novo serviço:
    - **Root Directory:** `backend/crm-leads-backend`
    - **Deploy → Custom Start Command:** `npm run start:worker`
-     (isso sobrepõe o start do `railway.json`, que é da API).
+     (o `railway.json` de propósito NÃO define um start command, para que cada
+     serviço use o seu — API `npm run start`, worker `npm run start:worker`).
+   - **Não** defina Health Check Path no worker: ele não tem página web e o
+     healthcheck falharia.
    - **Não** precisa de domínio (o worker não recebe requisições) nem de
      `prisma db push` (a API já aplica o schema).
 3. Em **Variables**, use as **mesmas** do serviço da API. Dica: no Railway você
