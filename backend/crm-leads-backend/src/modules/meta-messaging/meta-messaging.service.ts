@@ -6,6 +6,7 @@ import {
   notificarComentario,
 } from '@/lib/pusher';
 import { incrementarScore } from '@/lib/score.service';
+import { IaService } from '@/modules/ia/ia.service';
 import {
   MetaMessagingPayload,
   MessagingEvent,
@@ -27,7 +28,11 @@ const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
  * dispara cadência de WhatsApp — o atendimento é sempre humano.
  */
 export class MetaMessagingService {
-  constructor(private prisma: PrismaClient) {}
+  private iaService: IaService;
+
+  constructor(private prisma: PrismaClient) {
+    this.iaService = new IaService(prisma);
+  }
 
   // ---------------------------------------------------------------------------
   // Graph API — chamadas de baixo nível
@@ -150,9 +155,45 @@ export class MetaMessagingService {
       canal,
     });
 
-    // Toda mensagem do cliente marca a conversa como precisando de humano e
-    // some no board como "aguardando resposta". IA automática fica de fora de
-    // IG/Messenger de propósito (a IA hoje só sabe responder por WhatsApp).
+    incrementarScore(this.prisma, lead.id, 'mensagem_recebida').catch(() => {});
+
+    // --- Ramo da IA (mesma regra do WhatsApp) --------------------------
+    // Se a IA está ativa pra esse lead, ela gera E MANDA a resposta pelo
+    // MESMO canal social (Instagram/Messenger) — a IaService é agnóstica de
+    // canal: usa o histórico do lead + base de conhecimento. Se falhar por
+    // qualquer motivo, cai pro fluxo humano abaixo, pra nunca deixar o lead
+    // sem resposta por um erro técnico.
+    if (lead.statusIA === 'ativa') {
+      try {
+        const respostaIA = await this.iaService.gerarRespostaParaLead(lead.id, conteudo);
+
+        if (respostaIA.trim()) {
+          // enviadaPorUsuarioId ausente = resposta automática (não pausa a IA).
+          await this.enviarDm(lead.id, canal, respostaIA);
+        }
+
+        const leadIA = await this.prisma.lead.update({
+          where: { id: lead.id },
+          data: { status: 'respondeu' },
+        });
+
+        await notificarLeadAtualizado({
+          id: leadIA.id,
+          status: leadIA.status,
+          atendimentoHumano: leadIA.atendimentoHumano,
+          corretorId: leadIA.corretorId,
+        });
+
+        return;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`[ia] Falha ao responder DM automática do lead ${lead.id}:`, err);
+        // Cai pro fluxo humano abaixo.
+      }
+    }
+
+    // Sem IA (ou IA falhou): marca a conversa como precisando de humano e
+    // aparece no board como "aguardando resposta".
     const leadAtualizado = await this.prisma.lead.update({
       where: { id: lead.id },
       data: { status: 'respondeu', atendimentoHumano: true },
@@ -164,8 +205,6 @@ export class MetaMessagingService {
       atendimentoHumano: leadAtualizado.atendimentoHumano,
       corretorId: leadAtualizado.corretorId,
     });
-
-    incrementarScore(this.prisma, lead.id, 'mensagem_recebida').catch(() => {});
   }
 
   private extrairConteudo(message: NonNullable<MessagingEvent['message']>): string {
