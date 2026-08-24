@@ -16,6 +16,16 @@ export const whatsappWebhookPayloadSchema = z.object({
             metadata: z.object({
               phone_number_id: z.string(),
             }),
+            // Perfil de quem enviou (nome do WhatsApp + wa_id) — usado para
+            // nomear o lead quando um número novo manda mensagem.
+            contacts: z
+              .array(
+                z.object({
+                  profile: z.object({ name: z.string() }).optional(),
+                  wa_id: z.string(),
+                })
+              )
+              .optional(),
             messages: z
               .array(
                 z.object({
