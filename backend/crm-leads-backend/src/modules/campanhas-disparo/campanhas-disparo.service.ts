@@ -124,7 +124,7 @@ export class CampanhasDisparoService {
   }
 
   async listar() {
-    return this.prisma.campanhaDisparo.findMany({
+    const campanhas = await this.prisma.campanhaDisparo.findMany({
       orderBy: { criadoEm: 'desc' },
       include: {
         templateMensagem: true,
@@ -132,6 +132,28 @@ export class CampanhasDisparoService {
         _count: { select: { destinatarios: true } },
       },
     });
+
+    // Progresso (enviado/falhou/pendente) de cada campanha, em uma consulta só,
+    // para a lista mostrar a barra de andamento sem abrir a campanha.
+    const grupos = await this.prisma.campanhaDisparoLead.groupBy({
+      by: ['campanhaDisparoId', 'status'],
+      where: { campanhaDisparoId: { in: campanhas.map((c) => c.id) } },
+      _count: true,
+    });
+
+    const progressoPorCampanha = new Map<string, { pendente: number; enviado: number; falhou: number }>();
+    for (const g of grupos) {
+      const atual = progressoPorCampanha.get(g.campanhaDisparoId) ?? { pendente: 0, enviado: 0, falhou: 0 };
+      if (g.status === 'enviado') atual.enviado = g._count;
+      else if (g.status === 'falhou') atual.falhou = g._count;
+      else atual.pendente += g._count;
+      progressoPorCampanha.set(g.campanhaDisparoId, atual);
+    }
+
+    return campanhas.map((c) => ({
+      ...c,
+      progresso: progressoPorCampanha.get(c.id) ?? { pendente: 0, enviado: 0, falhou: 0 },
+    }));
   }
 
   async buscarPorId(id: string) {
@@ -296,11 +318,19 @@ export class CampanhasDisparoService {
     return this.buscarPorId(id);
   }
 
-  /** Só rascunho pode ser apagado — depois disso, vira histórico. */
+  /**
+   * Exclui a campanha em qualquer status. Se estiver agendada, cancela antes o
+   * job de início (para não disparar depois de apagada). Os destinatários são
+   * removidos em cascata; jobs por-destinatário já enfileirados viram no-op
+   * (o worker checa se o destinatário ainda existe antes de enviar).
+   */
   async deletar(id: string) {
     const campanha = await this.prisma.campanhaDisparo.findUnique({ where: { id } });
     if (!campanha) throw new Error('CAMPANHA_NAO_ENCONTRADA');
-    if (campanha.status !== 'rascunho') throw new Error('CAMPANHA_NAO_EDITAVEL');
+
+    if (campanha.status === 'agendada' && campanha.jobAgendamentoId) {
+      await cancelarInicioCampanha(campanha.jobAgendamentoId);
+    }
 
     await this.prisma.campanhaDisparo.delete({ where: { id } });
   }
