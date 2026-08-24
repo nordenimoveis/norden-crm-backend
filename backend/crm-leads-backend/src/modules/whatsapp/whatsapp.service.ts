@@ -198,9 +198,12 @@ export class WhatsappService {
         const { messages, statuses } = change.value;
 
         if (messages) {
+          const contacts = change.value.contacts ?? [];
           for (const msg of messages) {
             const conteudo = msg.text?.body ?? `[mensagem recebida - tipo: ${msg.type}]`;
-            await this.processarMensagemRecebida(msg.from, conteudo);
+            // Nome do perfil do WhatsApp de quem enviou (quando disponível).
+            const nomeContato = contacts.find((c) => c.wa_id === msg.from)?.profile?.name;
+            await this.processarMensagemRecebida(msg.from, conteudo, nomeContato);
           }
         }
 
@@ -213,10 +216,34 @@ export class WhatsappService {
     }
   }
 
-  private async processarMensagemRecebida(telefoneOrigem: string, texto: string) {
-    const lead = await this.prisma.lead.findFirst({ where: { telefone: telefoneOrigem } });
+  private async processarMensagemRecebida(
+    telefoneOrigem: string,
+    texto: string,
+    nomeContato?: string
+  ) {
+    let lead = await this.prisma.lead.findFirst({ where: { telefone: telefoneOrigem } });
 
-    if (!lead) return;
+    // Número novo (ainda não é lead): cria a conversa automaticamente, para
+    // NENHUM contato que chame a imobiliária no WhatsApp se perder. Entra
+    // como atendimento humano, sem cadência (origem manual/orgânica).
+    if (!lead) {
+      lead = await this.prisma.lead.create({
+        data: {
+          telefone: telefoneOrigem,
+          nome: nomeContato ?? null,
+          canalPrincipal: 'whatsapp',
+          origem: 'manual',
+          atendimentoHumano: true,
+        },
+      });
+
+      await notificarLeadAtualizado({
+        id: lead.id,
+        status: lead.status,
+        atendimentoHumano: lead.atendimentoHumano,
+        corretorId: lead.corretorId,
+      });
+    }
 
     const mensagem = await this.prisma.mensagem.create({
       data: {
