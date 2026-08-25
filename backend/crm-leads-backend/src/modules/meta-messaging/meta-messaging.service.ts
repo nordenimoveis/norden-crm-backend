@@ -280,11 +280,19 @@ export class MetaMessagingService {
       throw new Error(`Lead não tem contato no canal ${canal}`);
     }
 
-    // Messenger: POST /me/messages. Instagram: POST /{ig-account-id}/messages.
+    // Messenger: POST /{page-id}/messages. Instagram: POST /{ig-account-id}/messages.
+    //
+    // Usamos o ID explícito da Página (não o atalho `me`) porque o token é de
+    // System User: com ele `me` resolve para o usuário do sistema, não para a
+    // Página, e a Graph API responde com "Object with ID 'me' does not exist"
+    // (code 100). Com o id da Página o mesmo token de System User funciona.
+    // `me/messages` fica só como último recurso, se nenhum id estiver setado.
     const path =
       canal === Canal.instagram && env.META_IG_ACCOUNT_ID
         ? `${env.META_IG_ACCOUNT_ID}/messages`
-        : 'me/messages';
+        : env.META_PAGE_ID
+          ? `${env.META_PAGE_ID}/messages`
+          : 'me/messages';
 
     const resposta = await this.graph(path, {
       recipient: { id: contatoCanal.identidadeExterna },
