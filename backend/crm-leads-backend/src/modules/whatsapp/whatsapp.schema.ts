@@ -34,6 +34,21 @@ export const whatsappWebhookPayloadSchema = z.object({
                   timestamp: z.string(),
                   type: z.string(),
                   text: z.object({ body: z.string() }).optional(),
+                  // Resposta por botão de template (quick reply / CTA).
+                  button: z
+                    .object({ text: z.string().optional(), payload: z.string().optional() })
+                    .optional(),
+                  // Resposta de botão/lista interativa.
+                  interactive: z
+                    .object({
+                      button_reply: z
+                        .object({ id: z.string().optional(), title: z.string().optional() })
+                        .optional(),
+                      list_reply: z
+                        .object({ id: z.string().optional(), title: z.string().optional() })
+                        .optional(),
+                    })
+                    .optional(),
                 })
               )
               .optional(),

@@ -6,6 +6,7 @@ import { EnviarTextoInput, EnviarTemplateInput, WhatsappWebhookPayload } from '.
 import { IaService } from '@/modules/ia/ia.service';
 import { incrementarScore } from '@/lib/score.service';
 import { urlImagemWhatsapp } from '@/lib/cloudinary';
+import { variantesTelefoneBR } from '@/lib/telefone';
 
 const GRAPH_API_VERSION = 'v19.0';
 
@@ -204,7 +205,14 @@ export class WhatsappService {
         if (messages) {
           const contacts = change.value.contacts ?? [];
           for (const msg of messages) {
-            const conteudo = msg.text?.body ?? `[mensagem recebida - tipo: ${msg.type}]`;
+            // Além de texto, extrai o rótulo de respostas por botão/lista
+            // (senão aparece o inútil "[mensagem recebida - tipo: button]").
+            const conteudo =
+              msg.text?.body ??
+              msg.button?.text ??
+              msg.interactive?.button_reply?.title ??
+              msg.interactive?.list_reply?.title ??
+              `[mensagem recebida - tipo: ${msg.type}]`;
             // Nome do perfil do WhatsApp de quem enviou (quando disponível).
             const nomeContato = contacts.find((c) => c.wa_id === msg.from)?.profile?.name;
             await this.processarMensagemRecebida(msg.from, conteudo, nomeContato);
@@ -238,7 +246,21 @@ export class WhatsappService {
     texto: string,
     nomeContato?: string
   ) {
-    let lead = await this.prisma.lead.findFirst({ where: { telefone: telefoneOrigem } });
+    // Casa o lead pelas duas formas do número BR (com e sem o 9º dígito), senão
+    // uma resposta que chega sem o 9 cria um lead duplicado do que foi salvo com o 9.
+    const variantes = variantesTelefoneBR(telefoneOrigem);
+    let lead = await this.prisma.lead.findFirst({ where: { telefone: { in: variantes } } });
+
+    // Alinha o número do lead ao wa_id que a Meta usou nesta conversa. É esse
+    // número que tem a "janela de 24h" aberta — sem isso, respostas livres do
+    // painel falham com 131047 mesmo o cliente tendo acabado de responder.
+    if (lead && lead.telefone !== telefoneOrigem) {
+      await this.prisma.lead.update({
+        where: { id: lead.id },
+        data: { telefone: telefoneOrigem },
+      });
+      lead.telefone = telefoneOrigem;
+    }
 
     // Número novo (ainda não é lead): cria a conversa automaticamente, para
     // NENHUM contato que chame a imobiliária no WhatsApp se perder. Entra
