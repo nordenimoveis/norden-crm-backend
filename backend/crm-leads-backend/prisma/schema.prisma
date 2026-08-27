@@ -214,7 +214,10 @@ model CampanhaDisparoLead {
   campanhaDisparoId String          @map("campanha_disparo_id")
   campanhaDisparo   CampanhaDisparo @relation(fields: [campanhaDisparoId], references: [id], onDelete: Cascade)
   leadId            String          @map("lead_id")
-  lead              Lead            @relation(fields: [leadId], references: [id])
+  // Cascade: excluir um lead remove também seus registros de destinatário de
+  // campanha (sem isso, não seria possível excluir um lead que já foi alvo de
+  // uma campanha, que é o caso comum).
+  lead              Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   status    String    @default("pendente") // pendente | enviado | falhou
   erro      String? // motivo da falha, quando status = falhou — útil pra diagnosticar sem vasculhar logs
@@ -251,6 +254,9 @@ model Lead {
   temperatura          LeadTemperatura  @default(nao_avaliado)
   imobziId             String?          @unique @map("imobzi_id") // evita duplicidade ao receber o mesmo lead do Imobzi mais de uma vez
   atendimentoHumano    Boolean          @default(false) @map("atendimento_humano")
+  // Conversa arquivada: sai da caixa de entrada e da lista de leads por padrão,
+  // sem apagar nada. Usado para "limpar" o inbox de conversas encerradas.
+  arquivada            Boolean          @default(false) @map("arquivada")
   payloadBruto         Json?            @map("payload_bruto")
   dataAgendamento      DateTime?        @map("data_agendamento") // quando é o compromisso — independente do status do Kanban
   tipoAgendamento      TipoAgendamento? @map("tipo_agendamento")
