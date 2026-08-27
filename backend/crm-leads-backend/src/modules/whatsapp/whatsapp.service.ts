@@ -5,6 +5,7 @@ import { notificarNovaMensagem, notificarLeadAtualizado, notificarStatusMensagem
 import { EnviarTextoInput, EnviarTemplateInput, WhatsappWebhookPayload } from './whatsapp.schema';
 import { IaService } from '@/modules/ia/ia.service';
 import { incrementarScore } from '@/lib/score.service';
+import { urlImagemWhatsapp } from '@/lib/cloudinary';
 
 const GRAPH_API_VERSION = 'v19.0';
 
@@ -86,12 +87,15 @@ export class WhatsappService {
     // Cabeçalho de mídia entra ANTES do corpo — é assim que a API do
     // WhatsApp espera a ordem dos componentes.
     if (input.midiaUrl && input.midiaTipo) {
+      // Comprime imagem grande (>5MB) via Cloudinary antes de mandar pro
+      // WhatsApp, que rejeita imagem acima do limite (erro 131053).
+      const link = urlImagemWhatsapp(input.midiaUrl, input.midiaTipo);
       componentes.push({
         type: 'header',
         parameters: [
           {
             type: input.midiaTipo,
-            [input.midiaTipo]: { link: input.midiaUrl },
+            [input.midiaTipo]: { link },
           },
         ],
       });
