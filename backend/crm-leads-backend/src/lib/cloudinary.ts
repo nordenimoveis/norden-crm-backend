@@ -56,3 +56,28 @@ function inferirTipo(mimeType: string): 'image' | 'video' | 'document' {
   if (mimeType.startsWith('video/')) return 'video';
   return 'document';
 }
+
+/**
+ * Devolve uma URL da imagem segura para o cabeçalho de template do WhatsApp:
+ * a Meta rejeita imagem acima de 5 MB (erro 131053) e só aceita JPEG/PNG. Se a
+ * URL for do Cloudinary, injetamos uma transformação on-the-fly que limita a
+ * largura, comprime com qualidade automática e força JPEG — o suficiente para
+ * ficar abaixo do limite sem perda visível, sem alterar o arquivo original.
+ *
+ * Só se aplica a imagem. Vídeo/documento (limites bem maiores) passam direto,
+ * e qualquer URL que não seja do Cloudinary também é devolvida sem mudança.
+ */
+export function urlImagemWhatsapp(url: string, tipo: 'image' | 'video' | 'document'): string {
+  if (tipo !== 'image') return url;
+  const marcador = '/upload/';
+  const i = url.indexOf(marcador);
+  if (i === -1 || !url.includes('res.cloudinary.com')) return url;
+
+  // c_limit só reduz se for maior que o limite; q_auto:good equilibra
+  // qualidade x tamanho; f_jpg garante um formato que o WhatsApp aceita.
+  const transformacao = 'c_limit,w_1600,q_auto:good,f_jpg/';
+  const depois = url.slice(i + marcador.length);
+  // Evita duplicar a transformação se por algum motivo já estiver aplicada.
+  if (depois.startsWith(transformacao)) return url;
+  return url.slice(0, i + marcador.length) + transformacao + depois;
+}
