@@ -209,7 +209,20 @@ export class WhatsappService {
 
         if (statuses) {
           for (const status of statuses) {
-            await this.atualizarStatusMensagem(status.id, status.status);
+            // Só o status `failed` traz `errors`. Montamos uma string legível
+            // (código + título + detalhe) para o corretor ver no chat e para
+            // aparecer no log — é o que explica "enviou mas não chegou".
+            let erro: string | undefined;
+            if (status.status === 'failed' && status.errors?.length) {
+              const e = status.errors[0];
+              const detalhe = e.error_data?.details ?? e.message ?? e.title ?? '';
+              erro = [e.code, detalhe].filter(Boolean).join(' - ') || 'falha desconhecida';
+              // eslint-disable-next-line no-console
+              console.error(
+                `[whatsapp] Entrega falhou (msg ${status.id}, destinatário ${status.recipient_id}): ${erro}`
+              );
+            }
+            await this.atualizarStatusMensagem(status.id, status.status, erro);
           }
         }
       }
@@ -333,7 +346,11 @@ export class WhatsappService {
     });
   }
 
-  private async atualizarStatusMensagem(whatsappMessageId: string, status: string) {
+  private async atualizarStatusMensagem(
+    whatsappMessageId: string,
+    status: string,
+    erro?: string
+  ) {
     const statusMap: Record<string, 'enviada' | 'entregue' | 'lida' | 'falhou'> = {
       sent: 'enviada',
       delivered: 'entregue',
@@ -348,7 +365,11 @@ export class WhatsappService {
     const mensagem = await this.prisma.mensagem.findFirst({ where: { whatsappMessageId } });
     if (!mensagem) return;
 
-    await this.prisma.mensagem.update({ where: { id: mensagem.id }, data: { status: novoStatus } });
+    await this.prisma.mensagem.update({
+      where: { id: mensagem.id },
+      // Guarda o motivo quando falhou; limpa se a mensagem se recuperou.
+      data: { status: novoStatus, erro: novoStatus === 'falhou' ? (erro ?? null) : null },
+    });
 
     await notificarStatusMensagem({ id: mensagem.id, leadId: mensagem.leadId, status: novoStatus });
   }

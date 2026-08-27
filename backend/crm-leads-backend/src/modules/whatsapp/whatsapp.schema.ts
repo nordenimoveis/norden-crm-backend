@@ -44,6 +44,18 @@ export const whatsappWebhookPayloadSchema = z.object({
                   status: z.enum(['sent', 'delivered', 'read', 'failed']),
                   timestamp: z.string(),
                   recipient_id: z.string(),
+                  // Só vem quando status = failed. Traz o motivo da não-entrega
+                  // (ex.: 131049 marketing descartado, 131026 indisponível).
+                  errors: z
+                    .array(
+                      z.object({
+                        code: z.number().optional(),
+                        title: z.string().optional(),
+                        message: z.string().optional(),
+                        error_data: z.object({ details: z.string().optional() }).optional(),
+                      })
+                    )
+                    .optional(),
                 })
               )
               .optional(),
