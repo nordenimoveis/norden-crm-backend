@@ -482,6 +482,10 @@ model Mensagem {
   templateId        String?           @map("template_id")
   template          TemplateMensagem? @relation(fields: [templateId], references: [id])
   status            MensagemStatus    @default(pendente)
+  // Motivo da falha quando status = falhou (código + título do erro da Meta,
+  // ex.: "131049 - Message not delivered to maintain healthy engagement").
+  // Preenchido pelo webhook de status do WhatsApp para o corretor ver o porquê.
+  erro              String?           @map("erro")
   // ID da mensagem no WhatsApp Cloud API (mantido para não quebrar dados
   // históricos e o webhook de status de entrega/leitura do WhatsApp).
   whatsappMessageId String?           @map("whatsapp_message_id")
