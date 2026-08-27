@@ -10,6 +10,7 @@ import {
   atualizarTemperaturaSchema,
   listarLeadsQuerySchema,
   criarNotaInternaSchema,
+  arquivarLeadSchema,
 } from './leads.schema';
 import { atualizarStatusIASchema } from '@/modules/ia/ia.schema';
 
@@ -230,6 +231,51 @@ export async function leadsRoutes(app: FastifyInstance) {
       } catch (err) {
         if ((err as Error).message === 'CORRETOR_INVALIDO') {
           return reply.code(400).send({ message: 'Corretor de destino inválido ou inativo' });
+        }
+        throw err;
+      }
+    }
+  );
+
+  /**
+   * PATCH /leads/:id/arquivar — arquiva/desarquiva a conversa (some do inbox e
+   * da lista, sem apagar). Corretor só arquiva os próprios (checado no service).
+   */
+  app.patch('/leads/:id/arquivar', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { arquivada } = arquivarLeadSchema.parse(request.body);
+
+    try {
+      const lead = await service.arquivar(id, arquivada, request.user);
+      return reply.send(lead);
+    } catch (err) {
+      const mensagem = (err as Error).message;
+      if (mensagem === 'SEM_PERMISSAO') {
+        return reply.code(403).send({ message: 'Você só pode arquivar leads atribuídos a você' });
+      }
+      if (mensagem === 'LEAD_NAO_ENCONTRADO') {
+        return reply.code(404).send({ message: 'Lead não encontrado' });
+      }
+      throw err;
+    }
+  });
+
+  /**
+   * DELETE /leads/:id — exclusão definitiva (lead + histórico). Ação
+   * destrutiva: restrita a gestor/admin.
+   */
+  app.delete(
+    '/leads/:id',
+    { preHandler: [requireRole('gestor', 'admin')] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      try {
+        await service.deletar(id);
+        return reply.code(204).send();
+      } catch (err) {
+        if ((err as Error).message === 'LEAD_NAO_ENCONTRADO') {
+          return reply.code(404).send({ message: 'Lead não encontrado' });
         }
         throw err;
       }

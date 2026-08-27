@@ -225,7 +225,7 @@ export class LeadsService {
   }
 
   async listar(query: ListarLeadsQuery, usuario: UsuarioAutenticado) {
-    const { page, pageSize, busca, ...filtros } = query;
+    const { page, pageSize, busca, mostrarArquivadas, ...filtros } = query;
 
     if (usuario.papel === 'corretor') {
       filtros.corretorId = usuario.sub;
@@ -236,6 +236,8 @@ export class LeadsService {
     // continuam se comportando como AND entre si.
     const where = {
       ...filtros,
+      // Por padrão esconde arquivados; mostrarArquivadas traz só eles.
+      arquivada: mostrarArquivadas ? true : false,
       ...(busca
         ? {
             OR: [
@@ -495,6 +497,42 @@ export class LeadsService {
     });
 
     return atualizado;
+  }
+
+  /**
+   * Arquiva/desarquiva um lead (tira/põe de volta na caixa de entrada e na
+   * lista). Não apaga nada — é reversível. Corretor só arquiva os seus.
+   */
+  async arquivar(id: string, arquivada: boolean, usuario: UsuarioAutenticado) {
+    await this.verificarAcessoAoLead(id, usuario);
+
+    const atualizado = await this.prisma.lead.update({
+      where: { id },
+      data: { arquivada },
+    });
+
+    await notificarLeadAtualizado({
+      id: atualizado.id,
+      status: atualizado.status,
+      atendimentoHumano: atualizado.atendimentoHumano,
+      corretorId: atualizado.corretorId,
+      temperatura: atualizado.temperatura,
+    });
+
+    return atualizado;
+  }
+
+  /**
+   * Exclui um lead em definitivo, junto com todo o histórico ligado a ele
+   * (mensagens, notas, agendamentos, destinatários de campanha, documentos —
+   * tudo via cascade no schema). Ação destrutiva e irreversível: as rotas
+   * restringem a gestor/admin. Lança LEAD_NAO_ENCONTRADO se o id não existir.
+   */
+  async deletar(id: string) {
+    const lead = await this.prisma.lead.findUnique({ where: { id } });
+    if (!lead) throw new Error('LEAD_NAO_ENCONTRADO');
+
+    await this.prisma.lead.delete({ where: { id } });
   }
 
   /**

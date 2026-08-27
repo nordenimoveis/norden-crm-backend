@@ -119,8 +119,15 @@ export const listarLeadsQuerySchema = z.object({
   origem: leadOrigemEnum.optional(),
   temperatura: leadTemperaturaEnum.optional(), // suporta os filtros rápidos "Apenas Quentes"/"Apenas Mornos"
   busca: z.string().optional(), // busca livre por nome/telefone (tela "Meus Leads")
+  // Por padrão a lista esconde arquivados. `mostrarArquivadas=true` traz só os
+  // arquivados (para uma aba/filtro "Arquivados", se quiser).
+  mostrarArquivadas: z.coerce.boolean().optional(),
   page: z.coerce.number().min(1).default(1),
   pageSize: z.coerce.number().min(1).max(100).default(20),
+});
+
+export const arquivarLeadSchema = z.object({
+  arquivada: z.boolean(),
 });
 
 export type CriarLeadInput = z.infer<typeof criarLeadSchema>;
@@ -133,3 +140,4 @@ export type AtualizarStatusInput = z.infer<typeof atualizarStatusSchema>;
 export type AtualizarTemperaturaInput = z.infer<typeof atualizarTemperaturaSchema>;
 export type AtribuirCorretorInput = z.infer<typeof atribuirCorretorSchema>;
 export type ListarLeadsQuery = z.infer<typeof listarLeadsQuerySchema>;
+export type ArquivarLeadInput = z.infer<typeof arquivarLeadSchema>;
