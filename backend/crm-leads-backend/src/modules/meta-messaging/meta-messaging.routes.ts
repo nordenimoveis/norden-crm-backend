@@ -3,6 +3,8 @@ import { FastifyInstance } from 'fastify';
 import { Canal } from '@prisma/client';
 import { env } from '@/config/env';
 import { MetaMessagingService } from './meta-messaging.service';
+import { MetaAdsService } from '@/modules/meta-ads/meta-ads.service';
+import { metaWebhookPayloadSchema } from '@/modules/meta-ads/meta-ads.schema';
 import {
   metaMessagingPayloadSchema,
   enviarDmSchema,
@@ -28,6 +30,10 @@ function validarAssinatura(rawBody: string, assinaturaHeader?: string): boolean 
 
 export async function metaMessagingRoutes(app: FastifyInstance) {
   const service = new MetaMessagingService(app.prisma);
+  // Leads de anúncio (Lead Ads) chegam como `field: leadgen` na MESMA URL de
+  // callback da Página (a Meta só permite uma). Delegamos esses eventos ao
+  // serviço de Meta Ads, que busca os dados do lead e cria no CRM.
+  const metaAdsService = new MetaAdsService(app.prisma);
 
   // Corpo bruto para validar assinatura — escopo encapsulado neste plugin,
   // igual aos módulos meta-ads e whatsapp.
@@ -62,6 +68,31 @@ export async function metaMessagingRoutes(app: FastifyInstance) {
     if (!validarAssinatura(rawBody, assinatura)) {
       request.log.warn('Assinatura inválida no webhook de mensageria da Meta');
       return reply.code(401).send({ message: 'Assinatura inválida' });
+    }
+
+    // Evento de Lead Ads? (field "leadgen"). Se sim, é outro produto: busca os
+    // dados do lead e cria no CRM via serviço de Meta Ads, e encerra aqui.
+    const corpo = request.body as {
+      object?: string;
+      entry?: { changes?: { field?: string }[] }[];
+    };
+    const ehLeadgen =
+      corpo?.object === 'page' &&
+      Array.isArray(corpo.entry) &&
+      corpo.entry.some((e) => e.changes?.some((c) => c.field === 'leadgen'));
+
+    if (ehLeadgen) {
+      const parsedLead = metaWebhookPayloadSchema.safeParse(request.body);
+      if (parsedLead.success) {
+        reply.code(200).send({ recebido: true });
+        await metaAdsService.processarWebhook(parsedLead.data).catch((err) => {
+          request.log.error({ err }, 'Falha ao processar leadgen no webhook da Página');
+        });
+      } else {
+        request.log.warn({ erro: parsedLead.error.flatten() }, 'Payload de leadgen inesperado');
+        reply.code(200).send({ recebido: true, ignorado: true });
+      }
+      return;
     }
 
     const parsed = metaMessagingPayloadSchema.safeParse(request.body);
