@@ -57,7 +57,17 @@ export class MetaMessagingService {
 
     const json = (await response.json()) as Record<string, unknown>;
     if (!response.ok) {
-      throw new Error(`Graph API falhou (${path}): ${JSON.stringify(json)}`);
+      // Extrai a mensagem legível da Meta em vez de despejar o JSON cru, para
+      // o painel mostrar algo compreensível ao corretor (ex.: janela de 24h).
+      const erro = json.error as
+        | { message?: string; error_user_msg?: string; code?: number }
+        | undefined;
+      const detalhe = erro?.error_user_msg || erro?.message || JSON.stringify(json);
+      const janela24h = erro?.code === 10 || /24 hours|allowed window|outside/i.test(detalhe);
+      const amigavel = janela24h
+        ? 'Não é possível enviar mensagem livre: já se passaram mais de 24h desde a última mensagem do cliente. Use um template/anúncio para reabrir a conversa.'
+        : detalhe;
+      throw new Error(amigavel);
     }
     return json;
   }
