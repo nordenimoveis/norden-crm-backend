@@ -292,6 +292,31 @@ export class MetaMessagingService {
       include: { lead: true },
     });
     if (existente) {
+      // Backfill do nome: conversas criadas antes do token da Página ficaram sem
+      // nome. Se o contato/lead ainda não tem nome, tenta buscar de novo agora
+      // (best-effort) e atualiza — corrige conversas antigas na próxima mensagem.
+      if (!existente.nomeExibicao || !existente.lead.nome) {
+        const perfil = await this.buscarPerfil(canal, identidadeExterna);
+        if (perfil.nome || perfil.username || perfil.fotoUrl) {
+          const [contatoCanal, lead] = await Promise.all([
+            this.prisma.contatoCanal.update({
+              where: { id: existente.id },
+              data: {
+                nomeExibicao: existente.nomeExibicao ?? perfil.nome ?? null,
+                username: existente.username ?? perfil.username ?? null,
+                fotoUrl: existente.fotoUrl ?? perfil.fotoUrl ?? null,
+              },
+            }),
+            existente.lead.nome
+              ? Promise.resolve(existente.lead)
+              : this.prisma.lead.update({
+                  where: { id: existente.lead.id },
+                  data: { nome: perfil.nome ?? perfil.username ?? null },
+                }),
+          ]);
+          return { contatoCanal, lead };
+        }
+      }
       return { contatoCanal: existente, lead: existente.lead };
     }
 
