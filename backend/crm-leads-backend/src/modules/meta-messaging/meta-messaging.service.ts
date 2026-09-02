@@ -88,10 +88,20 @@ export class MetaMessagingService {
         | { message?: string; error_user_msg?: string; code?: number }
         | undefined;
       const detalhe = erro?.error_user_msg || erro?.message || JSON.stringify(json);
-      const janela24h = erro?.code === 10 || /24 hours|allowed window|outside/i.test(detalhe);
-      const amigavel = janela24h
-        ? 'Não é possível enviar mensagem livre: já se passaram mais de 24h desde a última mensagem do cliente. Use um template/anúncio para reabrir a conversa.'
-        : detalhe;
+      // Distingue os erros pela MENSAGEM (não só pelo código): code 10 pode ser
+      // tanto a janela de 24h quanto "sem permissão" (Acesso Padrão), e tratar
+      // todo code 10 como 24h confundia o usuário.
+      let amigavel = detalhe;
+      if (/24 hours|allowed window|outside.*window|standard messaging/i.test(detalhe)) {
+        amigavel =
+          'Não é possível enviar mensagem livre: já se passaram mais de 24h desde a última mensagem do cliente. Use um template/anúncio para reabrir a conversa.';
+      } else if (
+        erro?.code === 200 ||
+        /does not have permission|permission for this action|not have access/i.test(detalhe)
+      ) {
+        amigavel =
+          'Ainda sem Acesso Avançado: por enquanto só é possível responder pessoas que têm papel no app (admin/testador). Isso é liberado para qualquer pessoa quando a Revisão do App for aprovada.';
+      }
       throw new Error(amigavel);
     }
     return json;
