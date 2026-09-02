@@ -95,6 +95,10 @@ export class MetaMessagingService {
 
     for (const entry of payload.entry) {
       const eventos = [...(entry.messaging ?? []), ...(entry.standby ?? [])];
+      // eslint-disable-next-line no-console
+      console.log(
+        `[meta-msg] webhook object=${payload.object} canal=${canalPadrao} entry=${entry.id} msgs=${eventos.length} changes=${(entry.changes ?? []).length}`
+      );
       for (const evento of eventos) {
         await this.processarEventoMensagem(canalPadrao, entry.id, evento).catch((err) => {
           // eslint-disable-next-line no-console
@@ -116,14 +120,28 @@ export class MetaMessagingService {
   // ---------------------------------------------------------------------------
   private async processarEventoMensagem(canal: Canal, contaId: string, evento: MessagingEvent) {
     const message = evento.message;
+    // Log de diagnóstico: mostra por que uma DM foi (ou não) virou conversa.
+    // eslint-disable-next-line no-console
+    console.log(
+      `[meta-msg] DM canal=${canal} de=${evento.sender?.id} para=${evento.recipient?.id} entry=${contaId} temMsg=${!!message} echo=${message?.is_echo ?? false} texto="${(message?.text ?? '').slice(0, 40)}"`
+    );
+
     if (!message) return; // recibo de entrega/leitura — ignoramos
 
     // is_echo = mensagem que nós mesmos enviamos, devolvida pelo webhook. Já
     // registramos no envio, então ignoramos para não duplicar.
-    if (message.is_echo) return;
+    if (message.is_echo) {
+      // eslint-disable-next-line no-console
+      console.log(`[meta-msg] ignorado: is_echo (mensagem enviada pela própria conta)`);
+      return;
+    }
 
     const identidadeExterna = evento.sender.id;
-    if (identidadeExterna === contaId) return; // proteção extra contra eco
+    if (identidadeExterna === contaId) {
+      // eslint-disable-next-line no-console
+      console.log(`[meta-msg] ignorado: remetente == conta (${contaId}) — mensagem da própria conta`);
+      return; // proteção extra contra eco
+    }
 
     const conteudo = this.extrairConteudo(message);
 
