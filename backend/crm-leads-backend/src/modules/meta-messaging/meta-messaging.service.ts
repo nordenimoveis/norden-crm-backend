@@ -41,15 +41,40 @@ export class MetaMessagingService {
     return env.META_PAGE_ACCESS_TOKEN;
   }
 
+  // Token da Página (page-scoped) derivado do token configurado. A Send API do
+  // Messenger/IG exige o token DA PÁGINA; com um token de System User direto ela
+  // costuma responder "(#1) An unknown error has occurred". Derivamos uma vez
+  // (GET /{page-id}?fields=access_token) e cacheamos; se não der, caímos no
+  // token configurado, para nunca piorar o que já funcionava (ex.: comentários).
+  private pageTokenCache?: string;
+  private async obterPageToken(): Promise<string | undefined> {
+    if (this.pageTokenCache) return this.pageTokenCache;
+    const base = this.pageToken;
+    if (!base || !env.META_PAGE_ID) return base;
+    try {
+      const url = `${GRAPH_BASE}/${env.META_PAGE_ID}?fields=access_token&access_token=${base}`;
+      const resp = await fetch(url);
+      const json = (await resp.json()) as { access_token?: string };
+      if (resp.ok && json.access_token) {
+        this.pageTokenCache = json.access_token;
+        return json.access_token;
+      }
+    } catch {
+      // ignora — usa o token base
+    }
+    return base;
+  }
+
   private async graph(path: string, body: Record<string, unknown>) {
-    if (!this.pageToken) {
+    const token = await this.obterPageToken();
+    if (!token) {
       throw new Error('META_PAGE_ACCESS_TOKEN não configurado');
     }
 
     const response = await fetch(`${GRAPH_BASE}/${path}`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.pageToken}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
@@ -78,10 +103,11 @@ export class MetaMessagingService {
     canal: Canal,
     identidadeExterna: string
   ): Promise<{ nome?: string; username?: string; fotoUrl?: string }> {
-    if (!this.pageToken) return {};
+    const token = await this.obterPageToken();
+    if (!token) return {};
     try {
       const campos = canal === Canal.instagram ? 'name,username,profile_pic' : 'name,profile_pic';
-      const url = `${GRAPH_BASE}/${identidadeExterna}?fields=${campos}&access_token=${this.pageToken}`;
+      const url = `${GRAPH_BASE}/${identidadeExterna}?fields=${campos}&access_token=${token}`;
       const resp = await fetch(url);
       if (!resp.ok) return {};
       const json = (await resp.json()) as {
