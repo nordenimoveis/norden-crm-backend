@@ -41,6 +41,12 @@ const envSchema = z.object({
   // resposta fica indisponível para o canal correspondente.
   META_PAGE_ID: z.string().optional(),
   META_IG_ACCOUNT_ID: z.string().optional(),
+  // Token de acesso do Instagram (API do Instagram com Login do Instagram).
+  // Quando setado, o envio de DM e a busca de perfil do Instagram passam a usar
+  // graph.instagram.com com ESTE token (em vez do token da Página). É o modelo
+  // "Instagram Login": o token é gerado no passo "Gerar tokens de acesso" do
+  // produto API do Instagram, com a conta autorizando mensagens.
+  META_IG_ACCESS_TOKEN: z.string().optional(),
 
   // Trava anti-ban: teto de mensagens automatizadas (cadência) disparadas por dia.
   // Comece conservador e aumente conforme o número ganha reputação no WhatsApp.

@@ -16,6 +16,9 @@ import {
 
 const GRAPH_API_VERSION = 'v19.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
+// API do Instagram com Login do Instagram: chamadas vão para graph.instagram.com
+// com o token do Instagram (META_IG_ACCESS_TOKEN), não para a Graph do Facebook.
+const IG_GRAPH_BASE = 'https://graph.instagram.com/v21.0';
 
 /**
  * Serviço da caixa de entrada omnichannel da Meta: Instagram Direct, Messenger
@@ -65,13 +68,27 @@ export class MetaMessagingService {
     return base;
   }
 
-  private async graph(path: string, body: Record<string, unknown>) {
-    const token = await this.obterPageToken();
+  /**
+   * Escolhe a base e o token conforme o canal:
+   *  - Instagram COM META_IG_ACCESS_TOKEN → graph.instagram.com + token do IG
+   *    (modelo "Login do Instagram"): é o que faz DM do Instagram enviar/ler perfil.
+   *  - Caso contrário (Messenger, ou IG sem token próprio) → Graph do Facebook +
+   *    token da Página. Assim nada quebra enquanto o token do IG não estiver setado.
+   */
+  private async endpointPara(canal: Canal): Promise<{ base: string; token?: string }> {
+    if (canal === Canal.instagram && env.META_IG_ACCESS_TOKEN) {
+      return { base: IG_GRAPH_BASE, token: env.META_IG_ACCESS_TOKEN };
+    }
+    return { base: GRAPH_BASE, token: await this.obterPageToken() };
+  }
+
+  private async graph(canal: Canal, path: string, body: Record<string, unknown>) {
+    const { base, token } = await this.endpointPara(canal);
     if (!token) {
-      throw new Error('META_PAGE_ACCESS_TOKEN não configurado');
+      throw new Error('Token da Meta não configurado para este canal');
     }
 
-    const response = await fetch(`${GRAPH_BASE}/${path}`, {
+    const response = await fetch(`${base}/${path}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -113,11 +130,11 @@ export class MetaMessagingService {
     canal: Canal,
     identidadeExterna: string
   ): Promise<{ nome?: string; username?: string; fotoUrl?: string }> {
-    const token = await this.obterPageToken();
+    const { base, token } = await this.endpointPara(canal);
     if (!token) return {};
     try {
       const campos = canal === Canal.instagram ? 'name,username,profile_pic' : 'name,profile_pic';
-      const url = `${GRAPH_BASE}/${identidadeExterna}?fields=${campos}&access_token=${token}`;
+      const url = `${base}/${identidadeExterna}?fields=${campos}&access_token=${token}`;
       const resp = await fetch(url);
       if (!resp.ok) return {};
       const json = (await resp.json()) as {
@@ -369,25 +386,27 @@ export class MetaMessagingService {
       throw new Error(`Lead não tem contato no canal ${canal}`);
     }
 
-    // Messenger: POST /{page-id}/messages. Instagram: POST /{ig-account-id}/messages.
-    //
-    // Usamos o ID explícito da Página (não o atalho `me`) porque o token é de
-    // System User: com ele `me` resolve para o usuário do sistema, não para a
-    // Página, e a Graph API responde com "Object with ID 'me' does not exist"
-    // (code 100). Com o id da Página o mesmo token de System User funciona.
-    // `me/messages` fica só como último recurso, se nenhum id estiver setado.
-    const path =
-      canal === Canal.instagram && env.META_IG_ACCOUNT_ID
+    // Instagram (Login do Instagram): POST me/messages em graph.instagram.com
+    // com o token do IG — `me` = a própria conta do Instagram. Sem messaging_type.
+    // Messenger: POST /{page-id}/messages na Graph do Facebook (id explícito da
+    // Página porque o token de System User não resolve o atalho `me`).
+    const usaIgLogin = canal === Canal.instagram && !!env.META_IG_ACCESS_TOKEN;
+    const path = usaIgLogin
+      ? 'me/messages'
+      : canal === Canal.instagram && env.META_IG_ACCOUNT_ID
         ? `${env.META_IG_ACCOUNT_ID}/messages`
         : env.META_PAGE_ID
           ? `${env.META_PAGE_ID}/messages`
           : 'me/messages';
 
-    const resposta = await this.graph(path, {
+    const corpo: Record<string, unknown> = {
       recipient: { id: contatoCanal.identidadeExterna },
-      messaging_type: 'RESPONSE',
       message: { text: texto },
-    });
+    };
+    // messaging_type é do Messenger/Graph do Facebook; a API do IG não usa.
+    if (!usaIgLogin) corpo.messaging_type = 'RESPONSE';
+
+    const resposta = await this.graph(canal, path, corpo);
 
     const externalId =
       (resposta.message_id as string | undefined) ?? (resposta.mid as string | undefined);
@@ -502,7 +521,7 @@ export class MetaMessagingService {
     // IG usa /{comment-id}/replies; FB usa /{comment-id}/comments. Ambos
     // aceitam { message }.
     const sub = comentario.canal === Canal.instagram ? 'replies' : 'comments';
-    const resposta = await this.graph(`${comentario.comentarioExternoId}/${sub}`, {
+    const resposta = await this.graph(comentario.canal, `${comentario.comentarioExternoId}/${sub}`, {
       message: texto,
     });
     const novoId = (resposta.id as string | undefined) ?? undefined;
