@@ -108,7 +108,13 @@ export async function metaMessagingRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       // Nunca devolve 4xx aqui: a Meta reenvia em cima de erro e um payload
       // com formato novo não deve virar loop de reentrega. Loga e segue.
-      request.log.warn({ erro: parsed.error.flatten() }, 'Payload de mensageria inesperado');
+      // Loga também o corpo bruto (truncado) para vermos o formato real do
+      // payload que a Meta está mandando e ajustar o schema com precisão.
+      const bruto = ((request as any).rawBody as string | undefined)?.slice(0, 2500);
+      request.log.warn(
+        { erro: parsed.error.flatten(), corpo: bruto },
+        'Payload de mensageria inesperado'
+      );
       return reply.code(200).send({ recebido: true, ignorado: true });
     }
 
