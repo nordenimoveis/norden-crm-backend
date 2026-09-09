@@ -12,20 +12,29 @@ import {
   listarComentariosQuerySchema,
 } from './meta-messaging.schema';
 
+function assinaturaBate(rawBody: string, recebidoHex: string, secret: string): boolean {
+  const esperado = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  const bufEsperado = Buffer.from(esperado, 'hex');
+  const bufRecebido = Buffer.from(recebidoHex, 'hex');
+  if (bufEsperado.length !== bufRecebido.length) return false;
+  return crypto.timingSafeEqual(bufEsperado, bufRecebido);
+}
+
 function validarAssinatura(rawBody: string, assinaturaHeader?: string): boolean {
-  // Mesmo mecanismo dos webhooks Meta Ads / WhatsApp: HMAC SHA-256 do corpo
-  // bruto com o app secret. Em dev, sem secret configurada, não bloqueia.
-  if (!env.META_APP_SECRET) return env.NODE_ENV !== 'production';
+  // HMAC SHA-256 do corpo bruto com o app secret. Aceitamos DOIS secrets:
+  //  - META_APP_SECRET: app do Facebook (Messenger, comentários do FB, leadgen).
+  //  - META_IG_APP_SECRET: app do Instagram (API com Login do Instagram) — os
+  //    webhooks do Instagram são assinados com ESTE secret, diferente do FB.
+  // Sem isso, DM do Instagram chega mas é recusada com 401 (assinatura não bate).
+  const secrets = [env.META_APP_SECRET, env.META_IG_APP_SECRET].filter(
+    (s): s is string => Boolean(s)
+  );
+  // Em dev, sem nenhum secret configurado, não bloqueia.
+  if (secrets.length === 0) return env.NODE_ENV !== 'production';
   if (!assinaturaHeader) return false;
 
-  const esperado = crypto.createHmac('sha256', env.META_APP_SECRET).update(rawBody).digest('hex');
   const recebido = assinaturaHeader.replace('sha256=', '');
-
-  const bufEsperado = Buffer.from(esperado, 'hex');
-  const bufRecebido = Buffer.from(recebido, 'hex');
-  if (bufEsperado.length !== bufRecebido.length) return false;
-
-  return crypto.timingSafeEqual(bufEsperado, bufRecebido);
+  return secrets.some((secret) => assinaturaBate(rawBody, recebido, secret));
 }
 
 export async function metaMessagingRoutes(app: FastifyInstance) {

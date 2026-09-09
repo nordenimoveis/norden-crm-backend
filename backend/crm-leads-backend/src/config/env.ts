@@ -23,6 +23,10 @@ const envSchema = z.object({
 
   // Meta Ads / WhatsApp Cloud API (usados nos módulos 3 e 4, já deixamos previsto aqui)
   META_APP_SECRET: z.string().optional(),
+  // Chave secreta do app do Instagram (API com Login do Instagram). Os webhooks
+  // do Instagram são assinados com ESTE secret, não com o do app do Facebook —
+  // por isso a DM do IG chega mas é recusada (401) se validarmos só com o do FB.
+  META_IG_APP_SECRET: z.string().optional(),
   META_VERIFY_TOKEN: z.string().optional(),
   META_PAGE_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_TOKEN: z.string().optional(),
