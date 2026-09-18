@@ -1,0 +1,160 @@
+{
+  "name": "Norden | 02 Assistente Claude",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "norden-ia",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "51d02df0-23e7-4679-bf4b-91c63fff3d0a",
+      "name": "Mensagem do cliente",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "634d7d93-c898-4777-9b1d-2bf1dcdf0767"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Monta o pedido para a API da Anthropic a partir do contexto enviado pelo CRM\nconst b = $input.first().json.body;\nconst conversa = (b.messages || [])\n  .map(m => `[${m.from === 'cliente' ? 'Cliente' : 'Corretor'} ${m.at.slice(0, 16).replace('T', ' ')}] ${m.text}`)\n  .join('\\n');\n\nconst request = {\n  max_tokens: 800,\n  system: \"Você é o assistente interno da Norden Imóveis, imobiliária de alto padrão em Jurerê Internacional e região (Florianópolis/SC).\\nVocê NÃO fala com o cliente. Você ajuda o corretor a entender a conversa e sugere uma resposta que ele vai revisar antes de enviar.\\n\\nTom da Norden (\\\"Concierge\\\"): elegante, consultivo, acolhedor, sem pressão de vendas, sem gírias, sem excesso de emojis, frases curtas adequadas ao WhatsApp. Nunca invente preços, disponibilidade, metragens ou condições; se o cliente pedir algo que exige dado concreto, sugira que o corretor confirme e retorne.\\n\\nClassifique a temperatura do lead:\\n- QUENTE: demonstra intenção clara e próxima (quer visitar, pergunta condições, tem orçamento/prazo definidos).\\n- MORNO: interesse real, mas ainda explorando ou sem prazo.\\n- FRIO: pouco engajamento, curiosidade, ou sinal de que não é o momento.\\n- NAO_AVALIADO: informação insuficiente.\\n\\nResponda SOMENTE com um JSON válido, sem markdown, no formato:\\n{\\\"summary\\\": \\\"até 3 frases sobre o que o cliente busca e o estágio da conversa\\\", \\\"suggestedTemperature\\\": \\\"QUENTE|MORNO|FRIO|NAO_AVALIADO\\\", \\\"draftReply\\\": \\\"mensagem sugerida para o corretor enviar, assinando com o primeiro nome dele\\\"}\",\n  messages: [{\n    role: 'user',\n    content: `Dados do lead: ${JSON.stringify(b.lead)}\\nCorretor responsável: ${b.broker?.name}\\n\\nConversa (mais recente por último):\\n${conversa}`,\n  }],\n};\nreturn [{ json: { leadId: b.leadId, request } }];\n"
+      },
+      "id": "a00eabbf-4c9f-4dfd-a5e8-d91256da3898",
+      "name": "Montar pedido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $env.CLAUDE_MODEL || 'claude-sonnet-5', ...$json.request }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "b3405aaa-53fe-4e20-b938-641bd94d5819",
+      "name": "Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrai o JSON devolvido pelo Claude\nconst leadId = $('Montar pedido').first().json.leadId;\nconst text = ($input.first().json.content || [])\n  .filter(c => c.type === 'text')\n  .map(c => c.text)\n  .join('')\n  .replace(/```json|```/g, '')\n  .trim();\n\nlet data;\ntry {\n  data = JSON.parse(text);\n} catch (e) {\n  data = { summary: text.slice(0, 500), suggestedTemperature: 'NAO_AVALIADO', draftReply: '' };\n}\nconst temps = ['QUENTE', 'MORNO', 'FRIO', 'NAO_AVALIADO'];\nreturn [{ json: {\n  leadId,\n  summary: String(data.summary || '').slice(0, 2000),\n  suggestedTemperature: temps.includes(data.suggestedTemperature) ? data.suggestedTemperature : 'NAO_AVALIADO',\n  draftReply: String(data.draftReply || '').slice(0, 4000),\n} }];\n"
+      },
+      "id": "bd7e1564-68db-4db7-93d7-4c28259b66c9",
+      "name": "Interpretar resposta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CRM_INTERNAL_URL }}/internal/ai/result",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-key",
+              "value": "={{ $env.CRM_INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "6aa570aa-4f50-4f05-a81a-d4f675194114",
+      "name": "Enviar ao CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Mensagem do cliente": {
+      "main": [
+        [
+          {
+            "node": "Montar pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar pedido": {
+      "main": [
+        [
+          {
+            "node": "Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude": {
+      "main": [
+        [
+          {
+            "node": "Interpretar resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpretar resposta": {
+      "main": [
+        [
+          {
+            "node": "Enviar ao CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

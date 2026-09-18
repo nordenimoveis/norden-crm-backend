@@ -1,0 +1,183 @@
+# Norden CRM — infraestrutura completa em uma VPS (recomendado: 2 vCPU / 8 GB RAM)
+# Serviços: Caddy (HTTPS) · PostgreSQL · Redis · Chatwoot (web + worker) · n8n · CRM API
+#
+# Primeira instalação: siga o README na raiz do projeto.
+
+x-chatwoot-env: &chatwoot-env
+  RAILS_ENV: production
+  NODE_ENV: production
+  INSTALLATION_ENV: docker
+  RAILS_LOG_TO_STDOUT: "true"
+  SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY_BASE}
+  FRONTEND_URL: https://${CHATWOOT_DOMAIN}
+  DEFAULT_LOCALE: pt_BR
+  ENABLE_ACCOUNT_SIGNUP: "false"
+  POSTGRES_HOST: postgres
+  POSTGRES_DATABASE: chatwoot
+  POSTGRES_USERNAME: chatwoot
+  POSTGRES_PASSWORD: ${CHATWOOT_DB_PASSWORD}
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+  ACTIVE_STORAGE_SERVICE: local
+  MAILER_SENDER_EMAIL: ${MAILER_SENDER_EMAIL}
+  SMTP_ADDRESS: ${SMTP_ADDRESS}
+  SMTP_PORT: ${SMTP_PORT}
+  SMTP_USERNAME: ${SMTP_USERNAME}
+  SMTP_PASSWORD: ${SMTP_PASSWORD}
+  SMTP_AUTHENTICATION: login
+  SMTP_ENABLE_STARTTLS_AUTO: "true"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CRM_DOMAIN: ${CRM_DOMAIN}
+      CRM_PANEL_DOMAIN: ${CRM_PANEL_DOMAIN}
+      CHATWOOT_DOMAIN: ${CHATWOOT_DOMAIN}
+      N8N_DOMAIN: ${N8N_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [crm-api, painel, chatwoot-web, n8n]
+
+  postgres:
+    # Chatwoot 4.x exige a extensão pgvector
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ROOT_PASSWORD}
+      CHATWOOT_DB_PASSWORD: ${CHATWOOT_DB_PASSWORD}
+      N8N_DB_PASSWORD: ${N8N_DB_PASSWORD}
+      CRM_DB_PASSWORD: ${CRM_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  chatwoot-web:
+    # Fixe a versão e atualize com calma (leia o changelog antes)
+    image: chatwoot/chatwoot:${CHATWOOT_VERSION:-v4.14.0}
+    restart: unless-stopped
+    entrypoint: docker/entrypoints/rails.sh
+    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
+    environment: *chatwoot-env
+    volumes:
+      - chatwoot_storage:/app/storage
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  chatwoot-worker:
+    image: chatwoot/chatwoot:${CHATWOOT_VERSION:-v4.14.0}
+    restart: unless-stopped
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+    environment: *chatwoot-env
+    volumes:
+      - chatwoot_storage:/app/storage
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  n8n:
+    image: n8nio/n8n:${N8N_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD}
+      N8N_HOST: ${N8N_DOMAIN}
+      N8N_PROTOCOL: https
+      N8N_PORT: 5678
+      WEBHOOK_URL: https://${N8N_DOMAIN}/
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      GENERIC_TIMEZONE: America/Sao_Paulo
+      TZ: America/Sao_Paulo
+      N8N_DEFAULT_LOCALE: pt-BR
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: 336
+      # Os workflows leem estas variáveis via $env
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      CRM_INTERNAL_URL: http://crm-api:3333
+      CRM_INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  crm-api:
+    build: ../crm-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3333
+      PUBLIC_URL: https://${CRM_DOMAIN}
+      CORS_ORIGINS: ${CRM_CORS_ORIGINS}
+      DATABASE_URL: postgres://crm:${CRM_DB_PASSWORD}@postgres:5432/crm
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      CHATWOOT_WEBHOOK_TOKEN: ${CHATWOOT_WEBHOOK_TOKEN}
+      IMOBZI_WEBHOOK_TOKEN: ${IMOBZI_WEBHOOK_TOKEN}
+      # Comunicação interna, sem sair da VPS
+      CHATWOOT_BASE_URL: http://chatwoot-web:3000
+      CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID}
+      CHATWOOT_INBOX_ID: ${CHATWOOT_INBOX_ID}
+      CHATWOOT_ADMIN_TOKEN: ${CHATWOOT_ADMIN_TOKEN}
+      N8N_AI_WEBHOOK_URL: ${N8N_AI_WEBHOOK_URL}
+      CADENCE_SEND_ENABLED: ${CADENCE_SEND_ENABLED:-false}
+      CAMPAIGN_SEND_ENABLED: ${CAMPAIGN_SEND_ENABLED:-false}
+      CAMPAIGN_BATCH_SIZE: ${CAMPAIGN_BATCH_SIZE:-40}
+      TEMPLATE_STEP_1: ${TEMPLATE_STEP_1:-norden_boas_vindas}
+      TEMPLATE_STEP_2: ${TEMPLATE_STEP_2:-norden_qualificacao}
+      TEMPLATE_STEP_3: ${TEMPLATE_STEP_3:-norden_off_market}
+      TEMPLATE_STEP_4: ${TEMPLATE_STEP_4:-norden_despedida}
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # Painel (front-end Next.js). Fala com a API SÓ pela rede interna do Docker
+  # (CRM_API_URL), então o navegador nunca acessa a API direto — sem CORS.
+  painel:
+    build: ../painel
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      CRM_API_URL: http://crm-api:3333
+    depends_on:
+      - crm-api
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  redis_data:
+  chatwoot_storage:
+  n8n_data:
