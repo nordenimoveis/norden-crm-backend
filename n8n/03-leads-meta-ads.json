@@ -1,0 +1,100 @@
+{
+  "name": "Norden | 03 Leads do Meta Ads",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "newLead",
+        "page": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "form": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "id": "f068fed5-9c2c-4efe-84ee-7be274733168",
+      "name": "Novo lead no Meta",
+      "type": "n8n-nodes-base.facebookLeadAdsTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "1cbde3d4-8f56-4fee-8795-355197098c01"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Converte o lead do Meta (Facebook/Instagram) para o formato do CRM\nconst j = $input.first().json;\n// O formato varia conforme a versão do nó: aceita \"data\" (simplificado) ou \"field_data\" (bruto)\nlet fields = j.data || {};\nif (Array.isArray(j.field_data)) {\n  fields = Object.fromEntries(j.field_data.map(f => [f.name, (f.values || [])[0]]));\n}\nconst get = (...keys) => keys.map(k => fields[k]).find(v => v !== undefined && v !== '') ?? null;\n\n// Perguntas personalizadas do formulário viram \"interesse\"\nconst padrao = ['full_name', 'first_name', 'last_name', 'phone_number', 'email'];\nconst extras = Object.entries(fields)\n  .filter(([k]) => !padrao.includes(k))\n  .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`)\n  .join(' | ');\n\nconst platform = String(j.platform || j.data?.platform || '').toLowerCase();\nreturn [{ json: {\n  name: get('full_name') || [get('first_name'), get('last_name')].filter(Boolean).join(' ') || 'Lead Meta',\n  phone: get('phone_number', 'telefone', 'whatsapp'),\n  email: get('email'),\n  source: platform === 'ig' || platform === 'instagram' ? 'INSTAGRAM' : 'META_ADS',\n  externalId: String(j.id || j.leadgen_id || ''),\n  campaign: j.campaign?.name || j.campaign_name || j.form?.name || null,\n  interest: extras || null,\n  raw: j,\n} }];\n"
+      },
+      "id": "53eaeddf-2374-4112-9596-39369450c9bf",
+      "name": "Converter para o CRM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CRM_INTERNAL_URL }}/internal/leads/ingest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-key",
+              "value": "={{ $env.CRM_INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "029aa9a7-a010-4e30-8636-bcd0e0353c01",
+      "name": "Registrar no CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Novo lead no Meta": {
+      "main": [
+        [
+          {
+            "node": "Converter para o CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Converter para o CRM": {
+      "main": [
+        [
+          {
+            "node": "Registrar no CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

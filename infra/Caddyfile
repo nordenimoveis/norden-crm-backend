@@ -1,0 +1,35 @@
+{
+	email {$ACME_EMAIL}
+}
+
+# API do CRM (webhooks do Chatwoot/Imobzi; o painel fala com ela pela rede interna)
+{$CRM_DOMAIN} {
+	encode gzip
+	# /internal só é acessível de dentro da VPS (n8n usa a rede interna do Docker)
+	@internal path /internal/*
+	respond @internal 404
+	reverse_proxy crm-api:3333 {
+		flush_interval -1
+	}
+}
+
+# Painel do CRM (Next.js) — o que os corretores acessam
+{$CRM_PANEL_DOMAIN} {
+	encode gzip
+	# flush_interval -1 mantém o streaming do SSE (/api/events) sem buffering
+	reverse_proxy painel:3000 {
+		flush_interval -1
+	}
+}
+
+# Chatwoot: acesso apenas do dono/admin (corretores usam o CRM)
+{$CHATWOOT_DOMAIN} {
+	encode gzip
+	reverse_proxy chatwoot-web:3000
+}
+
+# n8n
+{$N8N_DOMAIN} {
+	encode gzip
+	reverse_proxy n8n:5678
+}
