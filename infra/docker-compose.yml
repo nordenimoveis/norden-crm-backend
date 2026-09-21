@@ -156,6 +156,10 @@ services:
       CADENCE_SEND_ENABLED: ${CADENCE_SEND_ENABLED:-false}
       CAMPAIGN_SEND_ENABLED: ${CAMPAIGN_SEND_ENABLED:-false}
       CAMPAIGN_BATCH_SIZE: ${CAMPAIGN_BATCH_SIZE:-40}
+      # Leads de formulário do Meta (Lead Ads) — vazio = desligado
+      META_LEADGEN_TOKEN: ${META_LEADGEN_TOKEN:-}
+      META_GRAPH_TOKEN: ${META_GRAPH_TOKEN:-}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v21.0}
       TEMPLATE_STEP_1: ${TEMPLATE_STEP_1:-norden_boas_vindas}
       TEMPLATE_STEP_2: ${TEMPLATE_STEP_2:-norden_qualificacao}
       TEMPLATE_STEP_3: ${TEMPLATE_STEP_3:-norden_off_market}

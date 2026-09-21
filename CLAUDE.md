@@ -86,6 +86,7 @@ Arquivos centrais da API:
 - `src/services/leads.ts` — porta de entrada única de leads.
 - `src/services/chatwoot.ts` — cliente da API do Chatwoot.
 - `src/lib/imobzi.ts` — mapeamento tolerante do webhook do Imobzi.
+- `src/lib/meta-leads.ts` + `/webhooks/meta-leadgen` (em `src/routes/webhooks.ts`) — leads de formulário do Meta (Lead Ads). **Uma assinatura `leadgen` da Página cobre todos os formulários** (não precisa mexer ao criar/pausar campanha). Verificação por `META_LEADGEN_TOKEN`; busca o lead na Graph API com `META_GRAPH_TOKEN` (`leads_retrieval`); cria com origem `META_ADS`.
 
 ## Comandos
 

@@ -55,6 +55,18 @@ const EnvSchema = z.object({
     .transform((v) => v === 'true'),
   /** Teto de disparos de campanha por execução do executor (n8n). */
   CAMPAIGN_BATCH_SIZE: z.coerce.number().int().positive().default(40),
+
+  /**
+   * Leads de formulário do Meta (Lead Ads). Segredo único usado como verify token (GET)
+   * e como ?token= (POST) do webhook /webhooks/meta-leadgen. Vazio = recurso desligado.
+   */
+  META_LEADGEN_TOKEN: z.string().default(''),
+  /** Token da Graph API (com leads_retrieval + acesso à página) para buscar os dados do lead. */
+  META_GRAPH_TOKEN: z.string().default(''),
+  /** Base da Graph API (configurável para testes). */
+  META_GRAPH_BASE_URL: z.string().url().default('https://graph.facebook.com'),
+  /** Versão da Graph API usada na busca do lead. */
+  META_GRAPH_VERSION: z.string().default('v21.0'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

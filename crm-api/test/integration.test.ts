@@ -22,6 +22,9 @@ if (!DB) {
     const path = (req.url ?? '').replace(/^\/api\/v1\/accounts\/1/, '');
     calls.push({ method: req.method!, path, body, token: String(req.headers['api_access_token']) });
     const send = (o: unknown) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
+    // Graph API simulada (busca do lead do formulário do Meta): /v21.0/<leadgen_id>?...
+    if (/^\/v\d+\.\d+\//.test(path))
+      return send({ id: '900900', field_data: [{ name: 'full_name', values: ['Lead Meta Form'] }, { name: 'phone_number', values: ['+55 48 99123-4567'] }, { name: 'email', values: ['form@meta.test'] }], campaign_name: 'Jurerê Lançamento' });
     if (path.startsWith('/contacts/search')) return send({ payload: [] });
     if (path === '/contacts') return send({ payload: { contact: { id: 11 } } });
     if (path === '/conversations') return send({ id: 500 + calls.filter((c) => c.path === '/conversations').length });
@@ -60,6 +63,10 @@ if (!DB) {
       N8N_AI_WEBHOOK_URL: '',
       CADENCE_SEND_ENABLED: 'true',
       CAMPAIGN_SEND_ENABLED: 'true',
+      META_LEADGEN_TOKEN: 'meta-hook-secret',
+      META_GRAPH_TOKEN: 'graph-token',
+      META_GRAPH_BASE_URL: `http://127.0.0.1:${port}`,
+      META_GRAPH_VERSION: 'v21.0',
     });
     const { buildServer } = await import('../src/server.js');
     ({ db } = await import('../src/db/client.js'));
@@ -400,6 +407,36 @@ if (!DB) {
       assert.equal(detail.status, 'CONCLUIDA');
       assert.equal(detail.pending, 0);
       assert.equal(detail.sent, camp.total);
+    });
+
+    await t.test('leads do Meta: verificação do webhook e criação via formulário', async () => {
+      const token = 'meta-hook-secret';
+
+      // GET de verificação: só devolve o desafio se o verify token bater
+      const verify = await app.inject({ method: 'GET', url: `/webhooks/meta-leadgen?hub.mode=subscribe&hub.verify_token=${token}&hub.challenge=desafio123` });
+      assert.equal(verify.statusCode, 200);
+      assert.equal(verify.body, 'desafio123');
+      const badVerify = await app.inject({ method: 'GET', url: `/webhooks/meta-leadgen?hub.mode=subscribe&hub.verify_token=errado&hub.challenge=x` });
+      assert.equal(badVerify.statusCode, 403);
+
+      // POST sem o token na query → 401
+      const noToken = await app.inject({ method: 'POST', url: '/webhooks/meta-leadgen', payload: { object: 'page', entry: [] } });
+      assert.equal(noToken.statusCode, 401);
+
+      // POST de evento leadgen → busca o lead na Graph (mock) e cria com origem META_ADS
+      const evt = await app.inject({
+        method: 'POST',
+        url: `/webhooks/meta-leadgen?token=${token}`,
+        payload: { object: 'page', entry: [{ id: 'PAGE1', time: 1, changes: [{ field: 'leadgen', value: { leadgen_id: '900900', form_id: 'F1', page_id: 'PAGE1' } }] }] },
+      });
+      assert.equal(evt.statusCode, 200, evt.body);
+      assert.equal(evt.json().created, 1);
+
+      const list = (await app.inject({ method: 'GET', url: '/leads', headers: as('dono') })).json();
+      const metaLead = list.find((l: any) => l.name === 'Lead Meta Form');
+      assert.ok(metaLead, 'lead do formulário do Meta apareceu no Kanban');
+      const full = (await app.inject({ method: 'GET', url: `/leads/${metaLead.id}`, headers: as('dono') })).json();
+      assert.equal(full.lead.source, 'META_ADS');
     });
   });
 }

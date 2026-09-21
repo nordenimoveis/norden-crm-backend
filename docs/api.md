@@ -106,6 +106,15 @@ Status da campanha: `RASCUNHO`, `AGENDADA`, `ENVIANDO`, `CONCLUIDA`, `CANCELADA`
 |---|---|---|
 | `POST /webhooks/chatwoot?token=` | `CHATWOOT_WEBHOOK_TOKEN` | Chatwoot (evento `message_created`) |
 | `POST /webhooks/imobzi?token=` | `IMOBZI_WEBHOOK_TOKEN` | Formulário do site via Imobzi |
+| `GET/POST /webhooks/meta-leadgen?token=` | `META_LEADGEN_TOKEN` | Meta Lead Ads (formulários) — captura **qualquer** formulário da página |
 | `POST /internal/leads/ingest` | `x-internal-key` + só rede interna | n8n (Meta Ads) |
 | `POST /internal/cadence/run` | idem | n8n (a cada 5 min) |
 | `POST /internal/ai/result` | idem | n8n (Claude) |
+
+### Leads de formulário do Meta (`/webhooks/meta-leadgen`)
+
+Assine o webhook `leadgen` da **Página** (produto *Webhooks* do app da Meta) — uma única assinatura cobre **todos os formulários** da página, atuais e futuros, sem reconfigurar quando cria/pausa campanha.
+
+- **`GET`** (verificação): a Meta chama uma vez ao salvar; devolve `hub.challenge` se `hub.verify_token` == `META_LEADGEN_TOKEN`.
+- **`POST`** (evento): para cada `leadgen_id`, o CRM busca os dados na Graph API (`META_GRAPH_TOKEN`, com `leads_retrieval` + acesso à página) e cria o lead com origem `META_ADS` (dedupe por telefone, roleta e cadência normais). Sempre responde `200` (erros por lead ficam no log).
+- **Callback URL**: `https://api-crm.<domínio>/webhooks/meta-leadgen?token=<META_LEADGEN_TOKEN>` · **Verify token**: o mesmo `META_LEADGEN_TOKEN`.

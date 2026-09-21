@@ -149,8 +149,26 @@ O token é guardado criptografado. É ele que faz a mensagem sair no nome do cor
 3. **01 Executor da cadência**: ative.
 4. **02 Assistente Claude**: ative. No `.env`, defina
    `N8N_AI_WEBHOOK_URL=http://n8n:5678/webhook/norden-ia` (rede interna) e rode `docker compose up -d crm-api`.
-5. **03 Leads do Meta Ads**: no nó "Novo lead no Meta", crie a credencial *Facebook Lead Ads* (usa o app da Meta), escolha a página e o formulário (ou "todos") e ative. Repita o workflow se houver mais de uma página. Se a importação reclamar desse nó, adicione um gatilho *Facebook Lead Ads* novo e ligue-o aos outros dois nós.
+5. **03 Leads do Meta Ads** (opcional): esse workflow captura **um** formulário por vez (limite do n8n). Para pegar **todos** os formulários da página automaticamente, prefira o webhook do CRM (passo **8b** abaixo) e deixe este workflow desativado.
 6. **04 Executor de campanhas**: ative (dispara os lotes das campanhas em massa, a cada 5 min, como a cadência).
+
+### 8b. Leads de formulário do Meta (recomendado — pega todos os formulários)
+
+Uma assinatura de página cobre **todos os formulários**, atuais e futuros — você não mexe ao criar/pausar campanha.
+
+1. Gere um segredo e um token da Graph API e preencha no `.env`:
+   ```bash
+   # segredo do webhook (verify token + ?token=)
+   echo "META_LEADGEN_TOKEN=$(openssl rand -hex 24)" >> .env
+   ```
+   - `META_GRAPH_TOKEN`: um token da Graph API com **`leads_retrieval`** + acesso à página (usuário do sistema com a Página como ativo, ou token de página de longa duração).
+   - Rode `docker compose up -d crm-api`.
+2. No app da Meta → produto **Webhooks** → objeto **Page** → **Editar assinatura**:
+   - **Callback URL**: `https://api-crm.<seu-domínio>/webhooks/meta-leadgen?token=<META_LEADGEN_TOKEN>`
+   - **Verify token**: o mesmo `META_LEADGEN_TOKEN`
+   - **Verificar e salvar** → assine o campo **`leadgen`**.
+3. Assine a **Página** ao app (produto Webhooks → Page → adicionar a página).
+4. Teste em `developers.facebook.com/tools/lead-ads-testing` → o lead nasce no Kanban com origem `META_ADS`.
 
 ## 9. Imobzi (formulário do site)
 
