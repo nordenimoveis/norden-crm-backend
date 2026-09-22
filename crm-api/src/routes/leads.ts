@@ -34,6 +34,19 @@ const CreateLead = z.object({
   startCadence: z.boolean().default(false),
 });
 
+/** Uma linha da importação em massa da base antiga. */
+const ImportRow = z.object({
+  name: z.string().trim().min(1, 'Nome obrigatório'),
+  phone: z.string().trim().optional(),
+  email: z.string().trim().optional(),
+  interest: z.string().trim().optional(),
+  notes: z.string().trim().optional(),
+});
+
+const ImportBody = z.object({
+  rows: z.array(ImportRow).min(1, 'Envie ao menos uma linha').max(5000, 'No máximo 5000 linhas por importação'),
+});
+
 const UpdateLead = z.object({
   name: z.string().min(2).optional(),
   email: z.string().email().nullable().optional(),
@@ -140,6 +153,40 @@ export default async function leadRoutes(app: FastifyInstance) {
       return reply.code(200).send({ lead: view(lead), duplicate: true });
     }
     return reply.code(201).send({ lead: view(lead), duplicate: false });
+  });
+
+  /**
+   * Importação em massa da base antiga (só gestores). Grava cada linha com a
+   * origem BASE_ANTIGA (etiqueta "Base Antiga", sem roleta e sem cadência) e
+   * devolve um resumo com criados, duplicados e as linhas com erro.
+   */
+  app.post('/leads/import', { preHandler: app.requireManager }, async (req) => {
+    const b = ImportBody.parse(req.body);
+    let created = 0;
+    let duplicate = 0;
+    const errors: { row: number; name: string; message: string }[] = [];
+
+    for (let i = 0; i < b.rows.length; i++) {
+      const r = b.rows[i]!;
+      const email = r.email && /.+@.+\..+/.test(r.email) ? r.email : null;
+      try {
+        const { created: isNew } = await ingestLead({
+          name: r.name,
+          phone: r.phone || null,
+          email,
+          interest: r.interest || null,
+          notes: r.notes || null,
+          source: 'BASE_ANTIGA',
+          raw: { importedBy: req.user.id },
+        });
+        if (isNew) created += 1;
+        else duplicate += 1;
+      } catch (err) {
+        errors.push({ row: i + 1, name: r.name, message: err instanceof Error ? err.message : 'Erro ao importar' });
+      }
+    }
+
+    return { total: b.rows.length, created, duplicate, errors };
   });
 
   /** Edição rápida (etapa, temperatura etc.) direto do card. */

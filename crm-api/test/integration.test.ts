@@ -438,5 +438,47 @@ if (!DB) {
       const full = (await app.inject({ method: 'GET', url: `/leads/${metaLead.id}`, headers: as('dono') })).json();
       assert.equal(full.lead.source, 'META_ADS');
     });
+
+    await t.test('importação da base antiga: só gestor, como Base Antiga, sem roleta/cadência', async () => {
+      const denied = await app.inject({
+        method: 'POST',
+        url: '/leads/import',
+        headers: as('ana'),
+        payload: { rows: [{ name: 'X', phone: '48 3000-9000' }] },
+      });
+      assert.equal(denied.statusCode, 403, 'corretor não importa base');
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/leads/import',
+        headers: as('dono'),
+        payload: {
+          rows: [
+            { name: 'Imob Um', phone: '48 3222-1000', email: 'um@old.com', interest: 'Cobertura' },
+            { name: 'Imob Dois', phone: '48 3222-2000' },
+            { name: 'Sem Contato' },
+          ],
+        },
+      });
+      assert.equal(res.statusCode, 200, res.body);
+      const out = res.json();
+      assert.equal(out.created, 2, JSON.stringify(out));
+      assert.equal(out.errors.length, 1, 'linha sem telefone/e-mail é reportada');
+      assert.equal(out.errors[0].row, 3);
+
+      // Base Antiga fica fora do Kanban por padrão…
+      const kanban = (await app.inject({ method: 'GET', url: '/leads?q=Imob', headers: as('dono') })).json();
+      assert.ok(!kanban.some((l: any) => l.name === 'Imob Um'), 'base antiga fica fora do Kanban');
+
+      // …e aparece ao incluir a base antiga, sem corretor, com a etiqueta e sem cadência.
+      const old = (await app.inject({ method: 'GET', url: '/leads?includeOld=true&q=Imob', headers: as('dono') })).json();
+      const one = old.find((l: any) => l.name === 'Imob Um');
+      assert.ok(one, 'aparece ao incluir a base antiga');
+      assert.equal(one.source, 'BASE_ANTIGA');
+      assert.equal(one.brokerId, null);
+      assert.deepEqual(one.tags, ['Base Antiga']);
+      const detail = (await app.inject({ method: 'GET', url: `/leads/${one.id}`, headers: as('dono') })).json();
+      assert.equal(detail.cadence.length, 0, 'base antiga não agenda cadência');
+    });
   });
 }

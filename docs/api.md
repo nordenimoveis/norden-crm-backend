@@ -20,6 +20,7 @@ Esta referência é a base para o painel (próxima etapa).
 | GET | `/leads` | logado | Lista para o Kanban. Filtros: `stage`, `temperature`, `source`, `brokerId` (gestor), `q`, `includeOld`, `limit`. Corretor recebe só os próprios |
 | GET | `/leads/:id` | dono do lead ou gestor | Lead + régua (`cadence`) + linha do tempo (`events`) |
 | POST | `/leads` | logado | Cadastro manual `{ name, phone?, email?, interest?, notes?, brokerId?, startCadence? }` |
+| POST | `/leads/import` | gestor | Importação em massa da base antiga: `{ rows: [{ name, phone?, email?, interest?, notes? }] }` (até 5000). Grava tudo como `BASE_ANTIGA` (etiqueta "Base Antiga", **sem roleta e sem cadência**), deduplica por telefone. Devolve `{ total, created, duplicate, errors: [{ row, name, message }] }` |
 | PATCH | `/leads/:id` | dono do lead ou gestor | Edição rápida: `stage`, `temperature`, `name`, `email`, `interest`, `notes`, `tags`, `lossReasonId`. Tirar o card de "Novo Lead" cancela a régua. Mover para uma etapa de papel `LOST` (Perdido) **exige** `lossReasonId`, grava `lostAt` e cancela a régua; sair de Perdido limpa o motivo |
 | POST | `/leads/:id/transfer` | gestor | `{ brokerId }` |
 | POST | `/leads/:id/accept-ai-temperature` | dono do lead ou gestor | Aplica a temperatura sugerida pela IA |
