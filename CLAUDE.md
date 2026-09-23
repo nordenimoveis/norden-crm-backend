@@ -32,14 +32,18 @@ Contexto permanente para o Claude Code. Leia antes de qualquer tarefa. Responda 
 - Mensagem de número desconhecido: vira lead `WHATSAPP_DIRETO`, entra na roleta, **sem cadência**.
 - Lead em "Lead Frio" que volta por campanha: retorna para "Novo Lead" sem reiniciar a régua.
 
-**Régua de cadência (4 templates de marketing aprovados na Meta)**
-| Passo | Quando | Template |
-|---|---|---|
-| 1 Recepção | 1–3 min após a entrada | `norden_boas_vindas` |
-| 2 Qualificação suave | 24h após o passo 1 | `norden_qualificacao` |
-| 3 Autoridade / off-market | 3 dias após o passo 2 | `norden_off_market` |
-| 4 Despedida elegante | 7 dias após o passo 3 → etapa "Lead Frio", tag "Lead Frio / Standby" | `norden_despedida` |
+**Régua de cadência (5 contatos de WhatsApp, 1/dia, + 2 tarefas de ligação)** — 5 templates de marketing aprovados na Meta. Plano em `src/services/cadence.ts` (`STEP_PLAN`); passos de canal `CALL` criam tarefa em vez de enviar.
+| Passo | Dia | Canal | Template |
+|---|---|---|---|
+| 1 Recepção | 1 (1–3 min após a entrada) | WhatsApp | `norden_boas_vindas` |
+| 2 Qualificação suave | 2 | WhatsApp | `norden_qualificacao` |
+| 3 Ligação (se não respondeu) | 2 | 📞 Tarefa | — |
+| 4 Autoridade / off-market | 3 | WhatsApp | `norden_off_market` |
+| 5 Apoio na decisão | 4 | WhatsApp | `norden_apoio` |
+| 6 Ligação (se não respondeu) | 4 | 📞 Tarefa | — |
+| 7 Despedida elegante | 5 → etapa "Lead Frio", tag "Lead Frio / Standby" | WhatsApp | `norden_despedida` |
 
+- **Tarefas de ligação**: passos de canal `CALL` inserem uma tarefa `CALL` (`lead_tasks`) para o corretor dono do lead, listada em `/tarefas` (API `/tasks`). Concluída com "Falei" (`FEITA`) ou "Não atendeu" (`SEM_RESPOSTA`). Régua e tarefas pendentes cancelam juntas quando o cliente responde ou o lead sai de "Novo Lead" (`cancelPendingTasks` em `src/services/tasks.ts`).
 - Variáveis dos templates: `{{1}}` primeiro nome do cliente, `{{2}}` primeiro nome do corretor.
 - Horário comercial **estrito: seg–sáb, 09h–19h, America/Sao_Paulo. Domingo bloqueado.** Fora da janela → reagenda para o próximo horário válido.
 - **Qualquer mensagem do cliente cancela a régua na hora**, aplica a tag "Atendimento Humano" e move o card para "Aguardando Resposta".

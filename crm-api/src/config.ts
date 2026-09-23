@@ -36,11 +36,12 @@ const EnvSchema = z.object({
   BUSINESS_START_HOUR: z.coerce.number().int().min(0).max(23).default(9),
   BUSINESS_END_HOUR: z.coerce.number().int().min(1).max(24).default(19),
 
-  /** Nomes dos templates aprovados na Meta, um por passo da cadência. */
+  /** Nomes dos templates aprovados na Meta, um por contato de WhatsApp da régua (5 contatos). */
   TEMPLATE_STEP_1: z.string().default('norden_boas_vindas'),
   TEMPLATE_STEP_2: z.string().default('norden_qualificacao'),
   TEMPLATE_STEP_3: z.string().default('norden_off_market'),
-  TEMPLATE_STEP_4: z.string().default('norden_despedida'),
+  TEMPLATE_STEP_4: z.string().default('norden_apoio'),
+  TEMPLATE_STEP_5: z.string().default('norden_despedida'),
   TEMPLATE_LANGUAGE: z.string().default('pt_BR'),
   TEMPLATE_CATEGORY: z.string().default('MARKETING'),
   /** Quando false, a cadência só registra o que enviaria (útil para testes antes da aprovação dos templates). */

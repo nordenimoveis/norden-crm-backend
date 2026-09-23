@@ -258,18 +258,53 @@ if (!DB) {
       assert.equal(site.email, 'site@x.com');
     });
 
-    await t.test('passo 4 leva o lead para Lead Frio', async () => {
-      const { runDueSteps } = await import('../src/services/cadence.js');
+    await t.test('passo final (despedida) leva o lead para Lead Frio', async () => {
+      const { runDueSteps, FINAL_STEP } = await import('../src/services/cadence.js');
       const { sql } = await import('drizzle-orm');
       await db.execute(sql`update cadence_steps set status = 'ENVIADO' where lead_id = ${ids.lead2}`);
       await db.execute(sql`update cadence_steps set status = 'CANCELADO' where status = 'PENDENTE'`);
-      await db.execute(sql`insert into cadence_steps (lead_id, step, scheduled_for) values (${ids.lead2}, 4, ${'2030-01-01T00:00:00Z'})`);
+      await db.execute(sql`insert into cadence_steps (lead_id, step, scheduled_for) values (${ids.lead2}, ${FINAL_STEP}, ${'2030-01-01T00:00:00Z'})`);
       const monday10 = DateTime.fromISO('2030-01-07T10:00', { zone: 'America/Sao_Paulo' }).toJSDate();
       const res = await runDueSteps(25, monday10);
       assert.equal(res.sent, 1, JSON.stringify(res));
       const d = (await app.inject({ method: 'GET', url: `/leads/${ids.lead2}`, headers: as('dono') })).json();
       assert.equal(d.lead.stage, 'LEAD_FRIO');
       assert.ok(d.lead.tags.includes('Lead Frio / Standby'));
+    });
+
+    await t.test('passo de ligação cria tarefa para o corretor; concluir e isolamento', async () => {
+      const { runDueSteps, STEP_PLAN } = await import('../src/services/cadence.js');
+      const { sql, eq } = await import('drizzle-orm');
+      // Descobre um passo de canal CALL (dia 2 ou dia 4).
+      const callStep = Number(Object.keys(STEP_PLAN).find((k) => (STEP_PLAN as any)[k].channel === 'CALL'));
+      assert.ok(callStep > 0, 'existe passo de ligação no plano');
+
+      // lead3 é do owner de lead3; agenda só um passo de ligação vencido.
+      const [lead3] = await db.select().from(schema.leads).where(eq(schema.leads.id, ids.lead3));
+      await db.execute(sql`update cadence_steps set status = 'CANCELADO' where lead_id = ${ids.lead3} and status in ('PENDENTE','PROCESSANDO')`);
+      await db.execute(sql`insert into cadence_steps (lead_id, step, scheduled_for) values (${ids.lead3}, ${callStep}, ${'2030-01-01T00:00:00Z'})`);
+      const monday10 = DateTime.fromISO('2030-01-07T10:00', { zone: 'America/Sao_Paulo' }).toJSDate();
+      const res = await runDueSteps(25, monday10);
+      assert.ok(res.tasks >= 1, JSON.stringify(res));
+
+      // A tarefa aparece na lista do gestor, ligada ao lead3.
+      const list = (await app.inject({ method: 'GET', url: '/tasks', headers: as('dono') })).json();
+      const task = list.find((tk: any) => tk.leadId === ids.lead3 && tk.type === 'CALL' && tk.status === 'PENDENTE');
+      assert.ok(task, 'tarefa de ligação criada');
+      assert.ok(task.title.includes('Ligar'), 'título da tarefa');
+      assert.equal(task.leadPhone, lead3!.phone);
+
+      // Corretor de outro lead não vê essa tarefa (isolamento).
+      const otherBroker = lead3!.brokerId === ids[ids.owner1!] ? ids.other1! : ids.owner1!;
+      const otherList = (await app.inject({ method: 'GET', url: '/tasks', headers: as(otherBroker) })).json();
+      assert.ok(!otherList.some((tk: any) => tk.id === task.id), 'corretor alheio não vê a tarefa');
+
+      // Concluir a tarefa ("não atendeu").
+      const done = await app.inject({ method: 'POST', url: `/tasks/${task.id}/done`, headers: as('dono'), payload: { status: 'SEM_RESPOSTA', note: 'Caixa postal' } });
+      assert.equal(done.statusCode, 200, done.body);
+      assert.equal(done.json().status, 'SEM_RESPOSTA');
+      const after = (await app.inject({ method: 'GET', url: '/tasks', headers: as('dono') })).json();
+      assert.ok(!after.some((tk: any) => tk.id === task.id), 'tarefa concluída sai da lista de pendentes');
     });
 
     await t.test('resultado da IA vira nota privada e sugestão', async () => {
@@ -354,8 +389,10 @@ if (!DB) {
 
     await t.test('envio manual de template (fora da janela de 24h)', async () => {
       const list = (await app.inject({ method: 'GET', url: `/leads/${ids.lead1}/templates`, headers: as('dono') })).json();
-      assert.equal(list.length, 4);
+      assert.equal(list.length, 5);
       assert.equal(list[0].name, 'norden_boas_vindas');
+      assert.equal(list[3].name, 'norden_apoio');
+      assert.equal(list[4].name, 'norden_despedida');
       assert.ok(list[0].preview.includes('Cliente'), 'preview preenche o primeiro nome');
 
       const sent = await app.inject({ method: 'POST', url: `/leads/${ids.lead1}/template`, headers: as('dono'), payload: { step: 1 } });

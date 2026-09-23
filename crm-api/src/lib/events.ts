@@ -11,7 +11,9 @@ export interface CrmEvent {
     | 'lead.updated'
     | 'lead.assigned'
     | 'message.created'
-    | 'ai.suggestion';
+    | 'ai.suggestion'
+    | 'task.created'
+    | 'task.updated';
   leadId: string;
   brokerId: string | null;
   data?: Record<string, unknown>;

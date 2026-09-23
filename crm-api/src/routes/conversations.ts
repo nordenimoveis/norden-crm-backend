@@ -7,10 +7,11 @@ import { leads } from '../db/schema.js';
 import { bus } from '../lib/events.js';
 import { HttpError } from '../lib/errors.js';
 import { buildContext, renderTemplate } from '../lib/template.js';
-import { TEMPLATE_PREVIEWS, cancelPendingSteps, templateName } from '../services/cadence.js';
+import { TEMPLATE_COUNT, TEMPLATE_PREVIEWS, cancelPendingSteps, templateName } from '../services/cadence.js';
 import { chatwoot, type ChatwootMessage } from '../services/chatwoot.js';
 import { brokerToken, ensureConversation, loadBroker } from '../services/conversation.js';
 import { TAG_ATENDIMENTO_HUMANO } from '../services/incoming.js';
+import { cancelPendingTasks } from '../services/tasks.js';
 import { logEvent } from '../services/timeline.js';
 import { loadLeadFor } from './leads.js';
 
@@ -72,6 +73,7 @@ export default async function conversationRoutes(app: FastifyInstance) {
     const now = new Date();
     const updated = await db.transaction(async (tx) => {
       await cancelPendingSteps(tx, lead.id, 'Corretor assumiu a conversa');
+      await cancelPendingTasks(tx, lead.id, 'Corretor assumiu a conversa');
       const stage = lead.stage === 'AGUARDANDO_RESPOSTA' || lead.stage === 'NOVO_LEAD' ? 'EM_ATENDIMENTO' : lead.stage;
       const tags = Array.from(new Set([...lead.tags, TAG_ATENDIMENTO_HUMANO]));
       const [row] = await tx.update(leads).set({ stage, tags, updatedAt: now }).where(eq(leads.id, lead.id)).returning();
@@ -88,7 +90,7 @@ export default async function conversationRoutes(app: FastifyInstance) {
     const lead = await loadLeadFor(req, req.params.id);
     const broker = await loadBroker(lead.brokerId);
     const ctx = buildContext(lead, broker);
-    return [1, 2, 3, 4].map((step) => ({
+    return Array.from({ length: TEMPLATE_COUNT }, (_, i) => i + 1).map((step) => ({
       step,
       name: templateName(step),
       preview: renderTemplate(TEMPLATE_PREVIEWS[step] ?? '', ctx),
@@ -101,7 +103,7 @@ export default async function conversationRoutes(app: FastifyInstance) {
    * Respeita CADENCE_SEND_ENABLED (modo simulado não envia de verdade).
    */
   app.post<{ Params: { id: string } }>('/leads/:id/template', async (req, reply) => {
-    const { step } = z.object({ step: z.number().int().min(1).max(4) }).parse(req.body);
+    const { step } = z.object({ step: z.number().int().min(1).max(TEMPLATE_COUNT) }).parse(req.body);
     const lead = await loadLeadFor(req, req.params.id);
     const broker = await loadBroker(lead.brokerId);
     const ctx = buildContext(lead, broker);
@@ -125,6 +127,7 @@ export default async function conversationRoutes(app: FastifyInstance) {
     const now = new Date();
     const updated = await db.transaction(async (tx) => {
       await cancelPendingSteps(tx, lead.id, 'Corretor enviou template');
+      await cancelPendingTasks(tx, lead.id, 'Corretor enviou template');
       const stage = lead.stage === 'AGUARDANDO_RESPOSTA' || lead.stage === 'NOVO_LEAD' ? 'EM_ATENDIMENTO' : lead.stage;
       const tags = Array.from(new Set([...lead.tags, TAG_ATENDIMENTO_HUMANO]));
       const [row] = await tx.update(leads).set({ stage, tags, updatedAt: now }).where(eq(leads.id, lead.id)).returning();

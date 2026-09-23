@@ -7,6 +7,7 @@ import { bus } from '../lib/events.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { assertLeadAccess, isManager, leadScope } from '../services/access.js';
 import { cancelPendingSteps } from '../services/cadence.js';
+import { cancelPendingTasks } from '../services/tasks.js';
 import { chatwoot } from '../services/chatwoot.js';
 import { ingestLead } from '../services/leads.js';
 import { assertActiveLossReason } from '../services/loss-reasons.js';
@@ -231,11 +232,9 @@ export default async function leadRoutes(app: FastifyInstance) {
 
     const updated = await db.transaction(async (tx) => {
       if (cancelCadence) {
-        await cancelPendingSteps(
-          tx,
-          lead.id,
-          becomingLost ? 'Lead marcado como perdido' : `Etapa alterada manualmente para ${b.stage}`,
-        );
+        const reason = becomingLost ? 'Lead marcado como perdido' : `Etapa alterada manualmente para ${b.stage}`;
+        await cancelPendingSteps(tx, lead.id, reason);
+        await cancelPendingTasks(tx, lead.id, reason);
       }
       const [row] = await tx.update(leads).set(set).where(eq(leads.id, lead.id)).returning();
       const changes = Object.fromEntries(

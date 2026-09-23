@@ -5,6 +5,7 @@ import { bus } from '../lib/events.js';
 import { normalizePhone } from '../lib/phone.js';
 import { scheduleAiAnalysis } from './ai.js';
 import { cancelPendingSteps } from './cadence.js';
+import { cancelPendingTasks } from './tasks.js';
 import { chatwoot, LABELS } from './chatwoot.js';
 import { loadBroker } from './conversation.js';
 import { ingestLead } from './leads.js';
@@ -52,6 +53,7 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
   const now = new Date();
   const updated = await db.transaction(async (tx) => {
     await cancelPendingSteps(tx, target.id, 'Cliente respondeu');
+    await cancelPendingTasks(tx, target.id, 'Cliente respondeu');
     const tags = Array.from(new Set([...target.tags, TAG_ATENDIMENTO_HUMANO]));
     const stage = target.stage === 'NOVO_LEAD' || target.stage === 'LEAD_FRIO' ? 'AGUARDANDO_RESPOSTA' : target.stage;
     const [row] = await tx

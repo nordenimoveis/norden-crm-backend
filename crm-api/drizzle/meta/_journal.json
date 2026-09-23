@@ -22,6 +22,13 @@
       "when": 1789671458152,
       "tag": "0002_campanhas",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790173152763,
+      "tag": "0003_bumpy_serpent_society",
+      "breakpoints": true
     }
   ]
 }

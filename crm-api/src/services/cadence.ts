@@ -7,38 +7,65 @@ import { bus } from '../lib/events.js';
 import { buildContext, renderTemplate } from '../lib/template.js';
 import { chatwoot, LABELS } from './chatwoot.js';
 import { brokerToken, ensureConversation, loadBroker } from './conversation.js';
+import { createCallTask } from './tasks.js';
 import { logEvent } from './timeline.js';
 
 /**
- * Régua da Norden:
- *  Passo 1 — recepção: 1 a 3 minutos após a entrada do lead
- *  Passo 2 — qualificação suave: 24h após o passo 1
- *  Passo 3 — autoridade / off-market: 3 dias após o passo 2
- *  Passo 4 — despedida elegante: 7 dias após o passo 3 → lead vai para "Lead Frio / Standby"
+ * Régua da Norden — 5 contatos de WhatsApp (1 por dia) + 2 tarefas de ligação:
+ *  Dia 1 (passo 1) — recepção (norden_boas_vindas): 1 a 3 min após a entrada
+ *  Dia 2 (passo 2) — qualificação suave (norden_qualificacao)
+ *  Dia 2 (passo 3) — LIGAÇÃO: tarefa para o corretor, se o cliente não respondeu
+ *  Dia 3 (passo 4) — autoridade / off-market (norden_off_market)
+ *  Dia 4 (passo 5) — apoio (norden_apoio)
+ *  Dia 4 (passo 6) — LIGAÇÃO: tarefa para o corretor
+ *  Dia 5 (passo 7) — despedida elegante (norden_despedida) → lead vai para "Lead Frio / Standby"
  * Tudo respeita a janela comercial (seg–sáb, 09h–19h). Qualquer mensagem do cliente cancela a régua.
  */
-export const FINAL_STEP = 4;
-const DELAY_AFTER_PREVIOUS_MS: Record<number, number> = {
-  2: 24 * 60 * 60 * 1000,
-  3: 3 * 24 * 60 * 60 * 1000,
-  4: 7 * 24 * 60 * 60 * 1000,
+type CadenceChannel = 'WHATSAPP' | 'CALL';
+
+interface StepDef {
+  channel: CadenceChannel;
+  /** Índice do template de WhatsApp (1..5), só para passos de canal WHATSAPP. */
+  templateIndex?: number;
+  /** Espera após o passo anterior, em ms (o passo 1 usa firstStepTime). */
+  delayAfterPreviousMs: number;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** A ligação aparece algumas horas após o WhatsApp do mesmo dia (dá tempo de o cliente responder). */
+const CALL_DELAY_MS = 3 * 60 * 60 * 1000;
+
+/** Plano da régua: passo → canal, template e espera. */
+export const STEP_PLAN: Record<number, StepDef> = {
+  1: { channel: 'WHATSAPP', templateIndex: 1, delayAfterPreviousMs: 0 },
+  2: { channel: 'WHATSAPP', templateIndex: 2, delayAfterPreviousMs: DAY_MS },
+  3: { channel: 'CALL', delayAfterPreviousMs: CALL_DELAY_MS },
+  4: { channel: 'WHATSAPP', templateIndex: 3, delayAfterPreviousMs: DAY_MS },
+  5: { channel: 'WHATSAPP', templateIndex: 4, delayAfterPreviousMs: DAY_MS },
+  6: { channel: 'CALL', delayAfterPreviousMs: CALL_DELAY_MS },
+  7: { channel: 'WHATSAPP', templateIndex: 5, delayAfterPreviousMs: DAY_MS },
 };
+
+export const FINAL_STEP = 7;
+/** Quantidade de templates de WhatsApp da régua (para o seletor manual). */
+export const TEMPLATE_COUNT = 5;
 const MAX_ATTEMPTS = 3;
 const STUCK_AFTER_MS = 15 * 60 * 1000;
 
 export const TAG_LEAD_FRIO = 'Lead Frio / Standby';
 
-/** Texto exibido no histórico do Chatwoot/CRM. Deve espelhar o texto aprovado na Meta (docs/templates-whatsapp.md). */
+/** Texto exibido no histórico do Chatwoot/CRM. Espelha o texto aprovado na Meta (docs/templates-whatsapp.md). Chave = índice do template (1..5). */
 export const TEMPLATE_PREVIEWS: Record<number, string> = {
   1: 'Olá, {{lead_first_name}}! Aqui é {{broker_first_name}}, da Norden Imóveis. Recebi seu interesse e será um prazer acompanhar você pessoalmente. Quando for conveniente, me conte um pouco sobre o que procura.',
   2: 'Olá, {{lead_first_name}}. Para selecionar apenas o que realmente faz sentido para você, posso entender melhor o que imagina? Tipologia, região preferida e o momento da sua busca já me ajudam bastante. Sigo à disposição, {{broker_first_name}} | Norden Imóveis.',
   3: 'Olá, {{lead_first_name}}. Parte dos imóveis que acompanhamos em Jurerê não é divulgada publicamente. Se desejar, posso apresentar algumas oportunidades reservadas alinhadas ao seu perfil. {{broker_first_name}} | Norden Imóveis.',
-  4: 'Olá, {{lead_first_name}}. Imagino que o momento talvez não seja agora, e está tudo bem. Vou pausar as mensagens por aqui, mas sigo à disposição sempre que desejar retomar. Um abraço, {{broker_first_name}} | Norden Imóveis.',
+  4: 'Olá, {{lead_first_name}}. Sei que uma decisão dessas merece calma. Se ajudar, posso enviar valores, plantas ou combinar uma visita sem compromisso, no seu tempo. Fico à disposição para conversar. {{broker_first_name}} | Norden Imóveis.',
+  5: 'Olá, {{lead_first_name}}. Imagino que o momento talvez não seja agora, e está tudo bem. Vou pausar as mensagens por aqui, mas sigo à disposição sempre que desejar retomar. Um abraço, {{broker_first_name}} | Norden Imóveis.',
 };
 
-export function templateName(step: number): string {
+export function templateName(templateIndex: number): string {
   const e = env();
-  return [e.TEMPLATE_STEP_1, e.TEMPLATE_STEP_2, e.TEMPLATE_STEP_3, e.TEMPLATE_STEP_4][step - 1]!;
+  return [e.TEMPLATE_STEP_1, e.TEMPLATE_STEP_2, e.TEMPLATE_STEP_3, e.TEMPLATE_STEP_4, e.TEMPLATE_STEP_5][templateIndex - 1]!;
 }
 
 export function businessWindow(): BusinessWindow {
@@ -52,9 +79,9 @@ export function firstStepTime(now: Date, random = Math.random): Date {
 }
 
 export function nextStepTime(step: number, previousSentAt: Date): Date {
-  const delay = DELAY_AFTER_PREVIOUS_MS[step];
-  if (delay === undefined) throw new Error(`Passo inválido: ${step}`);
-  return nextBusinessTime(new Date(previousSentAt.getTime() + delay), businessWindow());
+  const def = STEP_PLAN[step];
+  if (!def) throw new Error(`Passo inválido: ${step}`);
+  return nextBusinessTime(new Date(previousSentAt.getTime() + def.delayAfterPreviousMs), businessWindow());
 }
 
 export async function scheduleStep(tx: Tx, leadId: string, step: number, when: Date) {
@@ -86,6 +113,7 @@ interface RunResult {
   processed: number;
   sent: number;
   simulated: number;
+  tasks: number;
   rescheduled: number;
   cancelled: number;
   failed: number;
@@ -96,7 +124,7 @@ interface RunResult {
  * Usa FOR UPDATE SKIP LOCKED: duas execuções simultâneas nunca pegam o mesmo passo.
  */
 export async function runDueSteps(limit = 25, now = new Date()): Promise<RunResult> {
-  const result: RunResult = { processed: 0, sent: 0, simulated: 0, rescheduled: 0, cancelled: 0, failed: 0 };
+  const result: RunResult = { processed: 0, sent: 0, simulated: 0, tasks: 0, rescheduled: 0, cancelled: 0, failed: 0 };
 
   // Recupera passos que ficaram presos (ex.: servidor reiniciou no meio do envio)
   await db
@@ -133,11 +161,12 @@ export async function runDueSteps(limit = 25, now = new Date()): Promise<RunResu
   return result;
 }
 
-type Outcome = 'sent' | 'simulated' | 'rescheduled' | 'cancelled' | 'failed';
+type Outcome = 'sent' | 'simulated' | 'tasks' | 'rescheduled' | 'cancelled' | 'failed';
 
 async function processStep(step: CadenceStep, now: Date): Promise<Outcome> {
+  const def = STEP_PLAN[step.step];
   const [lead] = await db.select().from(leads).where(eq(leads.id, step.leadId));
-  if (!lead || !cadenceStillValid(lead)) {
+  if (!lead || !def || !cadenceStillValid(lead)) {
     await db.transaction((tx) => cancelPendingSteps(tx, step.leadId, 'Lead respondeu ou saiu de "Novo Lead"'));
     return 'cancelled';
   }
@@ -152,9 +181,23 @@ async function processStep(step: CadenceStep, now: Date): Promise<Outcome> {
     return 'rescheduled';
   }
 
+  // Passo de LIGAÇÃO: cria a tarefa para o corretor (não envia nada ao cliente) e segue a régua.
+  if (def.channel === 'CALL') {
+    const sentAt = now;
+    await db.transaction(async (tx) => {
+      await createCallTask(tx, lead, step.step, sentAt);
+      await tx.update(cadenceSteps).set({ status: 'ENVIADO', sentAt, claimedAt: null, lastError: null }).where(eq(cadenceSteps.id, step.id));
+      // Ligação nunca é o passo final (o fim é sempre a despedida por WhatsApp).
+      await scheduleStep(tx, lead.id, step.step + 1, nextStepTime(step.step + 1, sentAt));
+    });
+    bus.publish({ type: 'task.created', leadId: lead.id, brokerId: lead.brokerId, data: { cadenceStep: step.step } });
+    return 'tasks';
+  }
+
   const broker = await loadBroker(lead.brokerId);
   const ctx = buildContext(lead, broker);
-  const preview = renderTemplate(TEMPLATE_PREVIEWS[step.step] ?? '', ctx);
+  const templateIndex = def.templateIndex!;
+  const preview = renderTemplate(TEMPLATE_PREVIEWS[templateIndex] ?? '', ctx);
   const dryRun = !env().CADENCE_SEND_ENABLED;
 
   try {
@@ -162,7 +205,7 @@ async function processStep(step: CadenceStep, now: Date): Promise<Outcome> {
       const conversationId = await ensureConversation(lead, broker);
       await chatwoot().sendTemplate(
         conversationId,
-        { name: templateName(step.step), params: [ctx.lead_first_name ?? '', ctx.broker_first_name ?? ''] },
+        { name: templateName(templateIndex), params: [ctx.lead_first_name ?? '', ctx.broker_first_name ?? ''] },
         preview,
         brokerToken(broker),
       );
@@ -190,7 +233,7 @@ async function processStep(step: CadenceStep, now: Date): Promise<Outcome> {
   const sentAt = now;
   await db.transaction(async (tx) => {
     await tx.update(cadenceSteps).set({ status: 'ENVIADO', sentAt, claimedAt: null, lastError: dryRun ? 'simulado' : null }).where(eq(cadenceSteps.id, step.id));
-    await logEvent(tx, lead.id, dryRun ? 'cadence.simulated' : 'cadence.sent', { step: step.step, text: preview });
+    await logEvent(tx, lead.id, dryRun ? 'cadence.simulated' : 'cadence.sent', { step: step.step, templateIndex, text: preview });
 
     if (step.step < FINAL_STEP) {
       await scheduleStep(tx, lead.id, step.step + 1, nextStepTime(step.step + 1, sentAt));

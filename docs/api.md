@@ -49,11 +49,23 @@ Origens: `META_ADS`, `INSTAGRAM`, `SITE`, `WHATSAPP_DIRETO`, `BASE_ANTIGA`, `MAN
 |---|---|---|
 | GET | `/leads/:id/messages?before=<id>` | Histórico paginado. Devolve `canSendFreeText` e `windowExpiresAt` (janela de 24h) |
 | POST | `/leads/:id/messages` | `{ content }`. Responde **409** fora da janela de 24h. Move "Aguardando Resposta" → "Em Atendimento" |
-| GET | `/leads/:id/templates` | Os 4 templates aprovados, com `preview` já preenchido para o lead (`[{ step, name, preview }]`) |
-| POST | `/leads/:id/template` | `{ step }` (1–4) — envia template aprovado, **funciona fora da janela de 24h**. Cancela a régua e move para "Em Atendimento". Respeita `CADENCE_SEND_ENABLED` |
+| GET | `/leads/:id/templates` | Os 5 templates aprovados, com `preview` já preenchido para o lead (`[{ step, name, preview }]`) |
+| POST | `/leads/:id/template` | `{ step }` (1–5) — envia template aprovado, **funciona fora da janela de 24h**. Cancela a régua e move para "Em Atendimento". Respeita `CADENCE_SEND_ENABLED` |
 | POST | `/leads/:id/notes` | `{ content }` — nota interna, o cliente não vê |
 
 Mensagem: `{ id, direction: 'in'|'out'|'system', private, text, at, senderName, status, attachments[] }`.
+
+## Tarefas (ligações da régua)
+
+A régua tem 5 contatos de WhatsApp (1/dia) + 2 passos de **ligação** (dias 2 e 4). Cada passo de ligação cria uma tarefa `CALL` para o corretor dono do lead. Respondeu / saiu de "Novo Lead" → as tarefas pendentes são canceladas junto com a régua.
+
+| Método | Rota | Quem | Descrição |
+|---|---|---|---|
+| GET | `/tasks?status=PENDENTE` | logado | Tarefas visíveis (corretor só as suas; gestor todas). `status`: `PENDENTE` (padrão), `FEITA`, `SEM_RESPOSTA`, `CANCELADA` |
+| POST | `/tasks/:id/done` | dono do lead ou gestor | `{ status: 'FEITA' \| 'SEM_RESPOSTA', note? }` — conclui a ligação |
+
+Tarefa: `{ id, leadId, leadName, leadPhone, leadInterest, brokerId, brokerName, type, status, title, dueAt, note, doneAt, createdAt }`.
+Eventos SSE: `task.created` (nova ligação a fazer) e `task.updated` (concluída).
 
 ## Respostas rápidas (gatilho "/")
 
