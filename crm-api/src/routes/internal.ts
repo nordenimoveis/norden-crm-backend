@@ -6,6 +6,7 @@ import { applyAiResult } from '../services/ai.js';
 import { runDueSteps } from '../services/cadence.js';
 import { runDueCampaigns } from '../services/campaigns.js';
 import { ingestLead } from '../services/leads.js';
+import { runMetaPoll } from '../services/meta-poll.js';
 
 const IngestBody = z.object({
   name: z.string().default(''),
@@ -39,6 +40,9 @@ export default async function internalRoutes(app: FastifyInstance) {
   app.post('/internal/cadence/run', async () => runDueSteps());
 
   app.post('/internal/campaigns/run', async () => runDueCampaigns());
+
+  /** Coletor de leads do Meta (puxa leads novos dos formulários, sem depender do webhook). */
+  app.post('/internal/meta/poll', async () => runMetaPoll());
 
   app.post('/internal/ai/result', async (req) => {
     const b = AiBody.parse(req.body);

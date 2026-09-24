@@ -91,7 +91,8 @@ Arquivos centrais da API:
 - `src/services/leads.ts` — porta de entrada única de leads.
 - `src/services/chatwoot.ts` — cliente da API do Chatwoot.
 - `src/lib/imobzi.ts` — mapeamento tolerante do webhook do Imobzi.
-- `src/lib/meta-leads.ts` + `/webhooks/meta-leadgen` (em `src/routes/webhooks.ts`) — leads de formulário do Meta (Lead Ads). **Uma assinatura `leadgen` da Página cobre todos os formulários** (não precisa mexer ao criar/pausar campanha). Verificação por `META_LEADGEN_TOKEN`; busca o lead na Graph API com `META_GRAPH_TOKEN` (`leads_retrieval`); cria com origem `META_ADS`.
+- `src/lib/meta-leads.ts` + `/webhooks/meta-leadgen` (em `src/routes/webhooks.ts`) — leads de formulário do Meta (Lead Ads). **Uma assinatura `leadgen` da Página cobre todos os formulários** (não precisa mexer ao criar/pausar campanha). Verificação por `META_LEADGEN_TOKEN`; busca o lead na Graph API com `META_GRAPH_TOKEN` (**Page Access Token** com `leads_retrieval`); cria com origem `META_ADS`. Captura o empreendimento do nome do formulário.
+- **Coletor de leads do Meta** (`src/services/meta-poll.ts` + `POST /internal/meta/poll`): puxa os leads novos dos formulários da Página via Graph API (não depende do webhook da Meta, que exige App Review/Advanced Access). Liga com `META_PAGE_ID`; só considera leads dos últimos `META_POLL_LOOKBACK_MIN` min (dedup por telefone). Agendado a cada ~5 min (n8n ou cron). É o caminho **confiável** de entrada dos leads do Meta; o webhook fica como complemento.
 
 ## Comandos
 

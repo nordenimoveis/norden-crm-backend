@@ -34,6 +34,30 @@ export async function fetchMetaLead(leadgenId: string, fetchImpl: typeof fetch =
   return (await res.json()) as MetaLead;
 }
 
+/** Lista os formulários de Lead Ads da Página (para o coletor varrer). */
+export async function listLeadForms(fetchImpl: typeof fetch = fetch): Promise<{ id: string; name: string }[]> {
+  const { META_GRAPH_BASE_URL, META_GRAPH_VERSION, META_GRAPH_TOKEN, META_PAGE_ID } = env();
+  const url =
+    `${META_GRAPH_BASE_URL}/${META_GRAPH_VERSION}/${encodeURIComponent(META_PAGE_ID)}/leadgen_forms` +
+    `?fields=id,name&limit=200&access_token=${encodeURIComponent(META_GRAPH_TOKEN)}`;
+  const res = await fetchImpl(url);
+  if (!res.ok) throw new Error(`Graph API (leadgen_forms) respondeu ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
+  const data = (await res.json()) as { data?: { id: string; name: string }[] };
+  return data.data ?? [];
+}
+
+/** Lista os leads de um formulário (mais novos primeiro). */
+export async function listFormLeads(formId: string, limit = 25, fetchImpl: typeof fetch = fetch): Promise<MetaLead[]> {
+  const { META_GRAPH_BASE_URL, META_GRAPH_VERSION, META_GRAPH_TOKEN } = env();
+  const url =
+    `${META_GRAPH_BASE_URL}/${META_GRAPH_VERSION}/${encodeURIComponent(formId)}/leads` +
+    `?fields=id,created_time,field_data,campaign_name,ad_name&limit=${limit}&access_token=${encodeURIComponent(META_GRAPH_TOKEN)}`;
+  const res = await fetchImpl(url);
+  if (!res.ok) throw new Error(`Graph API (leads) respondeu ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
+  const data = (await res.json()) as { data?: MetaLead[] };
+  return data.data ?? [];
+}
+
 /** Busca o nome do formulário do Meta (usado como "empreendimento" quando não há campo próprio). */
 export async function fetchFormName(formId: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
   const { META_GRAPH_BASE_URL, META_GRAPH_VERSION, META_GRAPH_TOKEN } = env();

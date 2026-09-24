@@ -22,8 +22,10 @@ if (!DB) {
     const path = (req.url ?? '').replace(/^\/api\/v1\/accounts\/1/, '');
     calls.push({ method: req.method!, path, body, token: String(req.headers['api_access_token']) });
     const send = (o: unknown) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
-    // Graph API simulada (busca do lead e do nome do formulário do Meta): /v21.0/<id>?...
+    // Graph API simulada (lead, nome do formulário, formulários da página e leads do coletor): /v21.0/...
     if (/^\/v\d+\.\d+\//.test(path)) {
+      if (/\/leadgen_forms/.test(path)) return send({ data: [{ id: 'F1', name: 'Form - Poller Teste - 01/01/26 [CP]' }] });
+      if (/\/leads(\?|$)/.test(path)) return send({ data: [{ id: '700700', created_time: new Date().toISOString(), field_data: [{ name: 'full_name', values: ['Cliente Poller'] }, { name: 'phone_number', values: ['+55 48 98888-7000'] }] }] });
       if (/\bfields=name\b/.test(path)) return send({ id: 'FORM123', name: 'Form - Montblanc - 21/09/26 [CP]' });
       return send({ id: '900900', field_data: [{ name: 'full_name', values: ['Lead Meta Form'] }, { name: 'phone_number', values: ['+55 48 99123-4567'] }, { name: 'email', values: ['form@meta.test'] }], campaign_name: 'Jurerê Lançamento', form_id: 'FORM123' });
     }
@@ -69,6 +71,7 @@ if (!DB) {
       META_GRAPH_TOKEN: 'graph-token',
       META_GRAPH_BASE_URL: `http://127.0.0.1:${port}`,
       META_GRAPH_VERSION: 'v21.0',
+      META_PAGE_ID: 'PAGE1',
     });
     const { buildServer } = await import('../src/server.js');
     ({ db } = await import('../src/db/client.js'));
@@ -478,6 +481,21 @@ if (!DB) {
       assert.equal(full.lead.source, 'META_ADS');
       // Empreendimento capturado do nome do formulário ("Form - Montblanc - …" → "Montblanc").
       assert.equal(full.lead.interest, 'Montblanc');
+    });
+
+    await t.test('coletor do Meta: puxa leads novos dos formulários (sem webhook)', async () => {
+      const { runMetaPoll } = await import('../src/services/meta-poll.js');
+      const res = await runMetaPoll(new Date());
+      assert.ok(res.forms >= 1, JSON.stringify(res));
+      assert.ok(res.created >= 1, JSON.stringify(res));
+      const list = (await app.inject({ method: 'GET', url: '/leads?q=Poller', headers: as('dono') })).json();
+      const l = list.find((x: any) => x.name === 'Cliente Poller');
+      assert.ok(l, 'lead do coletor entrou no CRM');
+      assert.equal(l.source, 'META_ADS');
+      assert.equal(l.interest, 'Poller Teste'); // empreendimento vindo do nome do formulário
+      // Rodar de novo não duplica (dedup por telefone).
+      const again = await runMetaPoll(new Date());
+      assert.equal(again.created, 0, JSON.stringify(again));
     });
 
     await t.test('boas-vindas: injeta o empreendimento como 3º parâmetro quando ligado', async () => {

@@ -79,6 +79,10 @@ const EnvSchema = z.object({
   META_GRAPH_BASE_URL: z.string().url().default('https://graph.facebook.com'),
   /** Versão da Graph API usada na busca do lead. */
   META_GRAPH_VERSION: z.string().default('v21.0'),
+  /** ID da Página do Facebook (para o coletor puxar os leads dos formulários). Vazio = coletor desligado. */
+  META_PAGE_ID: z.string().default(''),
+  /** Janela (min) de leads considerados "novos" pelo coletor — deve cobrir o intervalo do agendador. */
+  META_POLL_LOOKBACK_MIN: z.coerce.number().int().positive().default(20),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
