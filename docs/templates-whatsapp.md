@@ -77,6 +77,26 @@ Olá, {{1}}. Imagino que o momento talvez não seja agora, e está tudo bem. Vou
 
 Não são templates. Quando o passo de ligação vence e o cliente ainda não respondeu, o sistema cria uma tarefa **"Ligar para \<cliente\>"** para o corretor dono do lead. Ele executa na tela **Tarefas** (botão de ligar + WhatsApp) e registra o resultado: **"Falei com o cliente"** ou **"Não atendeu"**. A régua segue mesmo se não atender; só para de verdade quando o cliente responde.
 
+## Personalização por empreendimento (opcional)
+
+Dá para personalizar a **1ª mensagem** com o empreendimento que o lead demonstrou interesse (útil para lançamentos/planta). O sistema captura o empreendimento do **nome do formulário do Meta** (ex.: formulário "Montblanc" → "Montblanc") — ou de um campo do formulário chamado `empreendimento`/`imovel`/`produto`, se existir. Fica salvo em `Interesse` do lead.
+
+Para usar, **aprove um template de boas-vindas com 3 variáveis** (`{{1}}` cliente, `{{2}}` corretor, `{{3}}` empreendimento). Sugestão de nome: `norden_boas_vindas_emp`.
+
+```
+Olá, {{1}}! Aqui é {{2}}, da Norden Imóveis. Recebi seu interesse no {{3}} e será um prazer te acompanhar pessoalmente. Quando puder, me conte um pouco sobre o que procura.
+```
+
+Amostras para a Meta: `Mariana` · `Pedro` · `Montblanc`.
+
+Depois de aprovado, no `.env`:
+```
+TEMPLATE_STEP_1=norden_boas_vindas_emp
+WELCOME_WITH_PRODUCT=true
+TEMPLATE_PRODUCT_FALLBACK=os empreendimentos em Jurerê
+```
+`TEMPLATE_PRODUCT_FALLBACK` é o texto usado quando o lead não tem empreendimento identificado (ex.: WhatsApp direto). Os passos 2–5 continuam com 2 variáveis. Dica: nomeie os formulários do Meta pelo empreendimento para o `{{3}}` sair limpo.
+
 ## Se alterar algum texto
 
 O texto que aparece no histórico do CRM fica em `crm-api/src/services/cadence.ts` (`TEMPLATE_PREVIEWS`). Mantenha os dois iguais para o corretor ver exatamente o que o cliente recebeu.

@@ -4,7 +4,7 @@ import { safeEqual } from '../plugins/auth.js';
 import { handleChatwootWebhook, type ChatwootWebhook } from '../services/incoming.js';
 import { ingestLead } from '../services/leads.js';
 import { mapImobziPayload } from '../lib/imobzi.js';
-import { fetchMetaLead, mapMetaLead } from '../lib/meta-leads.js';
+import { cleanFormName, fetchFormName, fetchMetaLead, mapMetaLead } from '../lib/meta-leads.js';
 
 type Obj = Record<string, unknown>;
 
@@ -62,6 +62,11 @@ export default async function webhookRoutes(app: FastifyInstance) {
             req.log.warn({ leadgenId }, 'Lead do Meta sem telefone/e-mail reconhecível');
             continue;
           }
+          // Empreendimento: campo próprio do formulário ou, na falta, o nome do formulário.
+          let interest = mapped.interest;
+          if (!interest && mapped.formId) {
+            interest = cleanFormName(await fetchFormName(mapped.formId));
+          }
           const { created: isNew } = await ingestLead({
             name: mapped.name,
             phone: mapped.phone,
@@ -69,6 +74,7 @@ export default async function webhookRoutes(app: FastifyInstance) {
             source: 'META_ADS',
             externalId: mapped.externalId,
             campaign: mapped.campaign,
+            interest,
             raw: lead as unknown as Record<string, unknown>,
           });
           if (isNew) created += 1;

@@ -5,6 +5,7 @@ import { nextBusinessTime } from '../src/lib/business-hours.js';
 import { normalizePhone } from '../src/lib/phone.js';
 import { buildContext, renderTemplate } from '../src/lib/template.js';
 import { mapImobziPayload } from '../src/lib/imobzi.js';
+import { cleanFormName } from '../src/lib/meta-leads.js';
 
 const W = { timezone: 'America/Sao_Paulo', startHour: 9, endHour: 19 };
 const at = (iso: string) => DateTime.fromISO(iso, { zone: W.timezone }).toJSDate();
@@ -35,6 +36,14 @@ test('variáveis das respostas rápidas', () => {
     renderTemplate('Olá {{lead_first_name}}, aqui é {{broker_name}} sobre {{ lead_interest }} {{desconhecida}}', ctx),
     'Olá Maria, aqui é Pedro Lima sobre Ônix 302 {{desconhecida}}',
   );
+});
+
+test('empreendimento a partir do nome do formulário do Meta', () => {
+  assert.equal(cleanFormName('Form - Montblanc - 22/07/26 [CP]'), 'Montblanc');
+  assert.equal(cleanFormName('Formulário - Terra Jurerê - 21/09/26'), 'Terra Jurerê');
+  assert.equal(cleanFormName('Stay Agronômica'), 'Stay Agronômica');
+  assert.equal(cleanFormName('  '), undefined);
+  assert.equal(cleanFormName(null), undefined);
 });
 
 test('mapeamento tolerante do Imobzi', () => {

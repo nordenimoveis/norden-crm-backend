@@ -45,6 +45,7 @@ Contexto permanente para o Claude Code. Leia antes de qualquer tarefa. Responda 
 
 - **Tarefas de ligação**: passos de canal `CALL` inserem uma tarefa `CALL` (`lead_tasks`) para o corretor dono do lead, listada em `/tarefas` (API `/tasks`). Concluída com "Falei" (`FEITA`) ou "Não atendeu" (`SEM_RESPOSTA`). Régua e tarefas pendentes cancelam juntas quando o cliente responde ou o lead sai de "Novo Lead" (`cancelPendingTasks` em `src/services/tasks.ts`).
 - Variáveis dos templates: `{{1}}` primeiro nome do cliente, `{{2}}` primeiro nome do corretor.
+- **1ª mensagem personalizada por empreendimento (opcional)**: com `WELCOME_WITH_PRODUCT=true` + `TEMPLATE_STEP_1` apontando para um template de 3 variáveis, o passo 1 injeta `{{3}}` = empreendimento (de `leads.interest`, capturado do **nome do formulário do Meta** via `cleanFormName`/`fetchFormName` em `src/lib/meta-leads.ts`, ou de um campo do form). Gerador único em `src/services/cadence.ts` (`buildStepMessage`/`renderStepMessage`), usado também pelo envio manual. Fallback: `TEMPLATE_PRODUCT_FALLBACK`.
 - Horário comercial **estrito: seg–sáb, 09h–19h, America/Sao_Paulo. Domingo bloqueado.** Fora da janela → reagenda para o próximo horário válido.
 - **Qualquer mensagem do cliente cancela a régua na hora**, aplica a tag "Atendimento Humano" e move o card para "Aguardando Resposta".
 - Corretor mover o card para fora de "Novo Lead" ou enviar mensagem também cancela a régua.

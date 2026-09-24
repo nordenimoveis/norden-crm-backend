@@ -49,6 +49,17 @@ const EnvSchema = z.object({
     .string()
     .default('false')
     .transform((v) => v === 'true'),
+  /**
+   * Personaliza a 1ª mensagem (boas-vindas) com o empreendimento do lead.
+   * Ligue SÓ depois de aprovar um template de boas-vindas com 3 variáveis
+   * ({{1}} cliente, {{2}} corretor, {{3}} empreendimento) e apontar TEMPLATE_STEP_1 para ele.
+   */
+  WELCOME_WITH_PRODUCT: z
+    .string()
+    .default('false')
+    .transform((v) => v === 'true'),
+  /** Texto usado no lugar do empreendimento quando o lead não tem produto identificado. */
+  TEMPLATE_PRODUCT_FALLBACK: z.string().default('os empreendimentos em Jurerê'),
   /** Quando false, as campanhas de disparo em massa só simulam (não enviam de verdade). */
   CAMPAIGN_SEND_ENABLED: z
     .string()

@@ -6,8 +6,8 @@ import { db } from '../db/client.js';
 import { leads } from '../db/schema.js';
 import { bus } from '../lib/events.js';
 import { HttpError } from '../lib/errors.js';
-import { buildContext, renderTemplate } from '../lib/template.js';
-import { TEMPLATE_COUNT, TEMPLATE_PREVIEWS, cancelPendingSteps, templateName } from '../services/cadence.js';
+import { buildContext } from '../lib/template.js';
+import { TEMPLATE_COUNT, cancelPendingSteps, renderStepMessage } from '../services/cadence.js';
 import { chatwoot, type ChatwootMessage } from '../services/chatwoot.js';
 import { brokerToken, ensureConversation, loadBroker } from '../services/conversation.js';
 import { TAG_ATENDIMENTO_HUMANO } from '../services/incoming.js';
@@ -90,11 +90,10 @@ export default async function conversationRoutes(app: FastifyInstance) {
     const lead = await loadLeadFor(req, req.params.id);
     const broker = await loadBroker(lead.brokerId);
     const ctx = buildContext(lead, broker);
-    return Array.from({ length: TEMPLATE_COUNT }, (_, i) => i + 1).map((step) => ({
-      step,
-      name: templateName(step),
-      preview: renderTemplate(TEMPLATE_PREVIEWS[step] ?? '', ctx),
-    }));
+    return Array.from({ length: TEMPLATE_COUNT }, (_, i) => i + 1).map((step) => {
+      const m = renderStepMessage(step, ctx);
+      return { step, name: m.name, preview: m.preview };
+    });
   });
 
   /**
@@ -107,7 +106,8 @@ export default async function conversationRoutes(app: FastifyInstance) {
     const lead = await loadLeadFor(req, req.params.id);
     const broker = await loadBroker(lead.brokerId);
     const ctx = buildContext(lead, broker);
-    const preview = renderTemplate(TEMPLATE_PREVIEWS[step] ?? '', ctx);
+    const message = renderStepMessage(step, ctx);
+    const preview = message.preview;
     const dryRun = !env().CADENCE_SEND_ENABLED;
 
     const conversationId = await ensureConversation(lead, broker);
@@ -117,7 +117,7 @@ export default async function conversationRoutes(app: FastifyInstance) {
     if (!dryRun) {
       const msg = await chatwoot().sendTemplate(
         conversationId,
-        { name: templateName(step), params: [ctx.lead_first_name ?? '', ctx.broker_first_name ?? ''] },
+        { name: message.name, params: message.params },
         preview,
         token,
       );
@@ -131,7 +131,7 @@ export default async function conversationRoutes(app: FastifyInstance) {
       const stage = lead.stage === 'AGUARDANDO_RESPOSTA' || lead.stage === 'NOVO_LEAD' ? 'EM_ATENDIMENTO' : lead.stage;
       const tags = Array.from(new Set([...lead.tags, TAG_ATENDIMENTO_HUMANO]));
       const [row] = await tx.update(leads).set({ stage, tags, updatedAt: now }).where(eq(leads.id, lead.id)).returning();
-      await logEvent(tx, lead.id, dryRun ? 'template.simulated' : 'template.sent', { step, name: templateName(step) }, req.user.id);
+      await logEvent(tx, lead.id, dryRun ? 'template.simulated' : 'template.sent', { step, name: message.name }, req.user.id);
       return row!;
     });
 

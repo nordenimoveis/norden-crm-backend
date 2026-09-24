@@ -22,9 +22,11 @@ if (!DB) {
     const path = (req.url ?? '').replace(/^\/api\/v1\/accounts\/1/, '');
     calls.push({ method: req.method!, path, body, token: String(req.headers['api_access_token']) });
     const send = (o: unknown) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
-    // Graph API simulada (busca do lead do formulário do Meta): /v21.0/<leadgen_id>?...
-    if (/^\/v\d+\.\d+\//.test(path))
-      return send({ id: '900900', field_data: [{ name: 'full_name', values: ['Lead Meta Form'] }, { name: 'phone_number', values: ['+55 48 99123-4567'] }, { name: 'email', values: ['form@meta.test'] }], campaign_name: 'Jurerê Lançamento' });
+    // Graph API simulada (busca do lead e do nome do formulário do Meta): /v21.0/<id>?...
+    if (/^\/v\d+\.\d+\//.test(path)) {
+      if (/\bfields=name\b/.test(path)) return send({ id: 'FORM123', name: 'Form - Montblanc - 21/09/26 [CP]' });
+      return send({ id: '900900', field_data: [{ name: 'full_name', values: ['Lead Meta Form'] }, { name: 'phone_number', values: ['+55 48 99123-4567'] }, { name: 'email', values: ['form@meta.test'] }], campaign_name: 'Jurerê Lançamento', form_id: 'FORM123' });
+    }
     if (path.startsWith('/contacts/search')) return send({ payload: [] });
     if (path === '/contacts') return send({ payload: { contact: { id: 11 } } });
     if (path === '/conversations') return send({ id: 500 + calls.filter((c) => c.path === '/conversations').length });
@@ -474,6 +476,22 @@ if (!DB) {
       assert.ok(metaLead, 'lead do formulário do Meta apareceu no Kanban');
       const full = (await app.inject({ method: 'GET', url: `/leads/${metaLead.id}`, headers: as('dono') })).json();
       assert.equal(full.lead.source, 'META_ADS');
+      // Empreendimento capturado do nome do formulário ("Form - Montblanc - …" → "Montblanc").
+      assert.equal(full.lead.interest, 'Montblanc');
+    });
+
+    await t.test('boas-vindas: injeta o empreendimento como 3º parâmetro quando ligado', async () => {
+      const { buildStepMessage } = await import('../src/services/cadence.js');
+      const ctx = { lead_name: 'Ana Souza', lead_first_name: 'Ana', broker_name: 'Pedro Lima', broker_first_name: 'Pedro', lead_interest: 'Montblanc' };
+      const off = buildStepMessage(1, ctx, { welcomeWithProduct: false, productFallback: 'X' });
+      assert.deepEqual(off.params, ['Ana', 'Pedro']);
+      const on = buildStepMessage(1, ctx, { welcomeWithProduct: true, productFallback: 'os imóveis' });
+      assert.deepEqual(on.params, ['Ana', 'Pedro', 'Montblanc']);
+      assert.ok(on.preview.includes('Montblanc'), on.preview);
+      const semProduto = buildStepMessage(1, { ...ctx, lead_interest: '' }, { welcomeWithProduct: true, productFallback: 'os empreendimentos em Jurerê' });
+      assert.deepEqual(semProduto.params, ['Ana', 'Pedro', 'os empreendimentos em Jurerê']);
+      const passo2 = buildStepMessage(2, ctx, { welcomeWithProduct: true, productFallback: 'X' });
+      assert.deepEqual(passo2.params, ['Ana', 'Pedro']);
     });
 
     await t.test('importação da base antiga: só gestor, como Base Antiga, sem roleta/cadência', async () => {

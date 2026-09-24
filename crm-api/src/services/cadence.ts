@@ -4,7 +4,7 @@ import { db, type Tx } from '../db/client.js';
 import { cadenceSteps, leads, type CadenceStep, type Lead } from '../db/schema.js';
 import { nextBusinessTime, type BusinessWindow } from '../lib/business-hours.js';
 import { bus } from '../lib/events.js';
-import { buildContext, renderTemplate } from '../lib/template.js';
+import { buildContext, renderTemplate, type TemplateContext } from '../lib/template.js';
 import { chatwoot, LABELS } from './chatwoot.js';
 import { brokerToken, ensureConversation, loadBroker } from './conversation.js';
 import { createCallTask } from './tasks.js';
@@ -66,6 +66,45 @@ export const TEMPLATE_PREVIEWS: Record<number, string> = {
 export function templateName(templateIndex: number): string {
   const e = env();
   return [e.TEMPLATE_STEP_1, e.TEMPLATE_STEP_2, e.TEMPLATE_STEP_3, e.TEMPLATE_STEP_4, e.TEMPLATE_STEP_5][templateIndex - 1]!;
+}
+
+/** Boas-vindas com o empreendimento ({{3}} = lead_interest). Deve espelhar o template aprovado. */
+export const WELCOME_PRODUCT_PREVIEW =
+  'Olá, {{lead_first_name}}! Aqui é {{broker_first_name}}, da Norden Imóveis. Recebi seu interesse no {{lead_interest}} e será um prazer te acompanhar pessoalmente. Quando puder, me conte um pouco sobre o que procura.';
+
+export interface StepMessage {
+  name: string;
+  params: string[];
+  preview: string;
+}
+
+/**
+ * Monta nome do template, parâmetros e texto de um passo de WhatsApp.
+ * No passo 1, com `welcomeWithProduct`, injeta o empreendimento do lead como
+ * 3º parâmetro ({{3}}), usando o fallback quando o lead não tem produto.
+ * Versão pura (sem `env`) para facilitar os testes.
+ */
+export function buildStepMessage(
+  templateIndex: number,
+  ctx: TemplateContext,
+  opts: { welcomeWithProduct: boolean; productFallback: string },
+): StepMessage {
+  const productMode = templateIndex === 1 && opts.welcomeWithProduct;
+  const product = (ctx.lead_interest && ctx.lead_interest.trim()) || opts.productFallback;
+  const renderCtx = productMode ? { ...ctx, lead_interest: product } : ctx;
+  const body = productMode ? WELCOME_PRODUCT_PREVIEW : TEMPLATE_PREVIEWS[templateIndex] ?? '';
+  const params = [ctx.lead_first_name ?? '', ctx.broker_first_name ?? ''];
+  if (productMode) params.push(product);
+  return { name: templateName(templateIndex), params, preview: renderTemplate(body, renderCtx) };
+}
+
+/** Igual ao acima, lendo as opções do ambiente. */
+export function renderStepMessage(templateIndex: number, ctx: TemplateContext): StepMessage {
+  const e = env();
+  return buildStepMessage(templateIndex, ctx, {
+    welcomeWithProduct: e.WELCOME_WITH_PRODUCT,
+    productFallback: e.TEMPLATE_PRODUCT_FALLBACK,
+  });
 }
 
 export function businessWindow(): BusinessWindow {
@@ -197,7 +236,8 @@ async function processStep(step: CadenceStep, now: Date): Promise<Outcome> {
   const broker = await loadBroker(lead.brokerId);
   const ctx = buildContext(lead, broker);
   const templateIndex = def.templateIndex!;
-  const preview = renderTemplate(TEMPLATE_PREVIEWS[templateIndex] ?? '', ctx);
+  const message = renderStepMessage(templateIndex, ctx);
+  const preview = message.preview;
   const dryRun = !env().CADENCE_SEND_ENABLED;
 
   try {
@@ -205,7 +245,7 @@ async function processStep(step: CadenceStep, now: Date): Promise<Outcome> {
       const conversationId = await ensureConversation(lead, broker);
       await chatwoot().sendTemplate(
         conversationId,
-        { name: templateName(templateIndex), params: [ctx.lead_first_name ?? '', ctx.broker_first_name ?? ''] },
+        { name: message.name, params: message.params },
         preview,
         brokerToken(broker),
       );
