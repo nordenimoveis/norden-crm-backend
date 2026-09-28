@@ -83,6 +83,16 @@ const EnvSchema = z.object({
   META_PAGE_ID: z.string().default(''),
   /** Janela (min) de leads considerados "novos" pelo coletor — deve cobrir o intervalo do agendador. */
   META_POLL_LOOKBACK_MIN: z.coerce.number().int().positive().default(20),
+
+  /**
+   * Web Push (notificação no celular/desktop mesmo com o CRM fechado).
+   * Par de chaves VAPID (gere com: npx web-push generate-vapid-keys).
+   * Vazio = notificações push desligadas (o sino dentro do CRM continua funcionando).
+   */
+  VAPID_PUBLIC_KEY: z.string().default(''),
+  VAPID_PRIVATE_KEY: z.string().default(''),
+  /** Contato do remetente exigido pelo protocolo (mailto: ou URL). */
+  VAPID_SUBJECT: z.string().default('mailto:imoveisnorden@gmail.com'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

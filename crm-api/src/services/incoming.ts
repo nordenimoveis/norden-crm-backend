@@ -9,6 +9,7 @@ import { cancelPendingTasks } from './tasks.js';
 import { chatwoot, LABELS } from './chatwoot.js';
 import { loadBroker } from './conversation.js';
 import { ingestLead } from './leads.js';
+import { notifyInbound } from './push.js';
 import { logEvent } from './timeline.js';
 
 export const TAG_ATENDIMENTO_HUMANO = 'Atendimento Humano';
@@ -71,6 +72,10 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
 
   bus.publish({ type: 'message.created', leadId: updated.id, brokerId: updated.brokerId, data: { messageId: p.id, inbound: true } });
   bus.publish({ type: 'lead.updated', leadId: updated.id, brokerId: updated.brokerId, data: { alert: 'aguardando_resposta' } });
+  // Notificação push (celular/desktop, mesmo com o CRM fechado) para o corretor + gestores.
+  notifyInbound({ id: updated.id, name: updated.name, brokerId: updated.brokerId }).catch((err) =>
+    log.warn(`Falha ao enviar notificação push (lead ${updated.id}): ${String(err)}`),
+  );
   scheduleAiAnalysis(updated.id, log.warn);
   return { handled: 'entrada' };
 }

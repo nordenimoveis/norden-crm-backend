@@ -305,6 +305,29 @@ export const campaignRecipients = pgTable(
   ],
 );
 
+/**
+ * Assinaturas de Web Push (notificação no celular/desktop mesmo com o CRM
+ * fechado). Cada dispositivo/navegador do usuário vira uma linha. A chave
+ * natural é o `endpoint` (único por dispositivo); as chaves `p256dh`/`auth`
+ * são usadas para criptografar a mensagem enviada pelo protocolo Web Push.
+ */
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    /** User-Agent no momento da inscrição (só para o usuário reconhecer o aparelho). */
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('push_subscriptions_user_idx').on(t.userId)],
+);
+
 export type User = typeof users.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type NewLead = typeof leads.$inferInsert;
