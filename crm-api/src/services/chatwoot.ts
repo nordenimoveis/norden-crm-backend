@@ -149,6 +149,35 @@ export class ChatwootClient {
     return res.payload;
   }
 
+  /**
+   * Envia uma ou mais mídias (imagem, PDF, planilha…) para o cliente pelo WhatsApp.
+   * Usa multipart (attachments[]), o formato que o Chatwoot repassa à Cloud API.
+   * `content` é a legenda opcional. Só funciona dentro da janela de 24h (regra do WhatsApp).
+   */
+  async sendAttachments(
+    conversationId: number,
+    files: Array<{ filename: string; contentType: string; data: Buffer }>,
+    opts: { content?: string; token?: string } = {},
+  ): Promise<ChatwootMessage> {
+    const url = `${this.base}/api/v1/accounts/${this.accountId}/conversations/${conversationId}/messages`;
+    const form = new FormData();
+    form.append('message_type', 'outgoing');
+    if (opts.content) form.append('content', opts.content);
+    for (const f of files) {
+      const blob = new Blob([new Uint8Array(f.data)], { type: f.contentType || 'application/octet-stream' });
+      form.append('attachments[]', blob, f.filename);
+    }
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { api_access_token: opts.token ?? this.adminToken },
+      body: form,
+      signal: AbortSignal.timeout(60_000),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new ChatwootError(res.status, text, `/conversations/${conversationId}/messages`);
+    return (text ? JSON.parse(text) : {}) as ChatwootMessage;
+  }
+
   async sendText(conversationId: number, content: string, opts: { token?: string; private?: boolean } = {}): Promise<ChatwootMessage> {
     return this.request<ChatwootMessage>(
       'POST',

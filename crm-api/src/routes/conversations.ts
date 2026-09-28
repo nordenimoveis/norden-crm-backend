@@ -139,6 +139,53 @@ export default async function conversationRoutes(app: FastifyInstance) {
     return reply.code(201).send(view);
   });
 
+  /**
+   * Envia anexos (imagem, PDF, planilha, print…) para o cliente pelo WhatsApp.
+   * Multipart: um ou mais `attachments[]` + campo `content` opcional (legenda).
+   * Mesma regra do texto livre: só dentro da janela de 24h; fora → 409 (use template).
+   */
+  app.post<{ Params: { id: string } }>('/leads/:id/attachments', async (req, reply) => {
+    const lead = await loadLeadFor(req, req.params.id);
+
+    if (!lead.lastInboundAt || Date.now() - lead.lastInboundAt.getTime() > WINDOW_MS) {
+      throw new HttpError(409, 'Fora da janela de 24h do WhatsApp: não é possível enviar arquivos, só um template aprovado.');
+    }
+
+    // Lê o multipart: coleta os arquivos e a legenda (campo "content").
+    const files: Array<{ filename: string; contentType: string; data: Buffer }> = [];
+    let content = '';
+    for await (const part of req.parts()) {
+      if (part.type === 'file') {
+        const data = await part.toBuffer();
+        if (data.length > 0) {
+          files.push({ filename: part.filename || 'arquivo', contentType: part.mimetype, data });
+        }
+      } else if (part.fieldname === 'content' && typeof part.value === 'string') {
+        content = part.value.slice(0, 1024);
+      }
+    }
+    if (files.length === 0) throw new HttpError(400, 'Nenhum arquivo enviado.');
+
+    const broker = await loadBroker(lead.brokerId);
+    const conversationId = await ensureConversation(lead, broker);
+    const token = req.user.id === broker?.id ? brokerToken(broker) : undefined;
+    const msg = await chatwoot().sendAttachments(conversationId, files, { content: content.trim() || undefined, token });
+
+    const now = new Date();
+    const updated = await db.transaction(async (tx) => {
+      await cancelPendingSteps(tx, lead.id, 'Corretor assumiu a conversa');
+      await cancelPendingTasks(tx, lead.id, 'Corretor assumiu a conversa');
+      const stage = lead.stage === 'AGUARDANDO_RESPOSTA' || lead.stage === 'NOVO_LEAD' ? 'EM_ATENDIMENTO' : lead.stage;
+      const tags = Array.from(new Set([...lead.tags, TAG_ATENDIMENTO_HUMANO]));
+      const [row] = await tx.update(leads).set({ stage, tags, updatedAt: now }).where(eq(leads.id, lead.id)).returning();
+      await logEvent(tx, lead.id, 'message.outbound', { messageId: msg.id, attachments: files.length }, req.user.id);
+      return row!;
+    });
+
+    bus.publish({ type: 'lead.updated', leadId: updated.id, brokerId: updated.brokerId });
+    return reply.code(201).send(toView(msg));
+  });
+
   /** Nota interna (não vai para o cliente). */
   app.post<{ Params: { id: string } }>('/leads/:id/notes', async (req, reply) => {
     const { content } = z.object({ content: z.string().trim().min(1).max(4000) }).parse(req.body);

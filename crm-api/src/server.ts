@@ -1,4 +1,5 @@
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import { sql } from 'drizzle-orm';
 import Fastify from 'fastify';
@@ -39,6 +40,12 @@ export async function buildServer() {
     credentials: true,
   });
   await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
+  // Upload de anexos no chat (book, planta, tabela, print). Limite por arquivo
+  // generoso o bastante para PDFs de material; o WhatsApp/Meta ainda aplica os
+  // limites por tipo (imagem 5MB, documento 100MB) e devolvemos o erro tratado.
+  await app.register(multipart, {
+    limits: { fileSize: 50 * 1024 * 1024, files: 10, fields: 5 },
+  });
   await app.register(authPlugin);
 
   app.setErrorHandler((err, req, reply) => {
