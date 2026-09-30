@@ -28,6 +28,11 @@ export default async function campaignRoutes(app: FastifyInstance) {
     }));
   });
 
+  /** Sincroniza o catálogo com os templates aprovados na Meta (WABA). */
+  app.post('/campaign-templates/sync', async () => {
+    return svc.syncCampaignTemplates();
+  });
+
   app.post('/campaign-templates', async (req, reply) => {
     const b = z
       .object({

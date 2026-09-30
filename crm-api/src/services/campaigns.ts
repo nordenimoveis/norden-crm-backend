@@ -12,6 +12,7 @@ import {
 } from '../db/schema.js';
 import { nextBusinessTime } from '../lib/business-hours.js';
 import { badRequest, notFound, HttpError } from '../lib/errors.js';
+import { fetchApprovedTemplates } from '../lib/meta-templates.js';
 import { buildContext, renderTemplate } from '../lib/template.js';
 import { businessWindow } from './cadence.js';
 import { chatwoot } from './chatwoot.js';
@@ -73,6 +74,55 @@ export async function updateTemplate(
 export async function deleteTemplate(id: string): Promise<void> {
   const deleted = await db.delete(whatsappTemplates).where(eq(whatsappTemplates.id, id)).returning();
   if (deleted.length === 0) throw notFound('Template');
+}
+
+export interface SyncResult {
+  imported: number;
+  updated: number;
+  total: number;
+}
+
+/**
+ * Sincroniza o catálogo de templates de campanha com os APROVADOS na Meta.
+ * Faz upsert por nome+idioma: cria os que faltam, atualiza texto/variáveis dos
+ * existentes e os reativa. Não mexe em templates que não vieram da Meta.
+ */
+export async function syncCampaignTemplates(): Promise<SyncResult> {
+  const approved = await fetchApprovedTemplates();
+  let imported = 0;
+  let updated = 0;
+
+  for (const t of approved) {
+    const [existing] = await db
+      .select()
+      .from(whatsappTemplates)
+      .where(and(eq(whatsappTemplates.name, t.name), eq(whatsappTemplates.language, t.language)));
+
+    if (existing) {
+      await db
+        .update(whatsappTemplates)
+        .set({
+          preview: t.preview,
+          paramSources: t.paramSources,
+          category: t.category,
+          active: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(whatsappTemplates.id, existing.id));
+      updated++;
+    } else {
+      await db.insert(whatsappTemplates).values({
+        name: t.name,
+        language: t.language,
+        category: t.category,
+        preview: t.preview,
+        paramSources: t.paramSources,
+      });
+      imported++;
+    }
+  }
+
+  return { imported, updated, total: approved.length };
 }
 
 /* ------------------------------ Público (audiência) ------------------------------ */

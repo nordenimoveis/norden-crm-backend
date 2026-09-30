@@ -6,6 +6,7 @@ import { normalizePhone } from '../src/lib/phone.js';
 import { buildContext, renderTemplate } from '../src/lib/template.js';
 import { mapImobziPayload } from '../src/lib/imobzi.js';
 import { cleanFormName } from '../src/lib/meta-leads.js';
+import { mapBodyVariables } from '../src/lib/meta-templates.js';
 
 const W = { timezone: 'America/Sao_Paulo', startHour: 9, endHour: 19 };
 const at = (iso: string) => DateTime.fromISO(iso, { zone: W.timezone }).toJSDate();
@@ -44,6 +45,21 @@ test('empreendimento a partir do nome do formulário do Meta', () => {
   assert.equal(cleanFormName('Stay Agronômica'), 'Stay Agronômica');
   assert.equal(cleanFormName('  '), undefined);
   assert.equal(cleanFormName(null), undefined);
+});
+
+test('variáveis do template da Meta viram tokens do CRM', () => {
+  const r = mapBodyVariables('Olá {{1}}, aqui é {{2}} sobre {{3}}. Podemos falar?');
+  assert.equal(r.preview, 'Olá {{lead_first_name}}, aqui é {{broker_first_name}} sobre {{lead_interest}}. Podemos falar?');
+  assert.deepEqual(r.paramSources, ['{{lead_first_name}}', '{{broker_first_name}}', '{{lead_interest}}']);
+
+  // Sem variáveis: texto intacto, sem fontes.
+  const s = mapBodyVariables('Mensagem fixa, sem variáveis.');
+  assert.equal(s.preview, 'Mensagem fixa, sem variáveis.');
+  assert.deepEqual(s.paramSources, []);
+
+  // Variável repetida entra uma vez só nas fontes.
+  const d = mapBodyVariables('{{1}}, confirmo com você, {{1}}.');
+  assert.deepEqual(d.paramSources, ['{{lead_first_name}}']);
 });
 
 test('mapeamento tolerante do Imobzi', () => {

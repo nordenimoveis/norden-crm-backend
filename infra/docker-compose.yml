@@ -163,6 +163,9 @@ services:
       # Coletor de leads do Meta (puxa os leads dos formulários, sem depender do webhook)
       META_PAGE_ID: ${META_PAGE_ID:-}
       META_POLL_LOOKBACK_MIN: ${META_POLL_LOOKBACK_MIN:-20}
+      # Sincronização do catálogo de templates de campanha com a Meta (WABA)
+      META_WABA_ID: ${META_WABA_ID:-}
+      META_WABA_TOKEN: ${META_WABA_TOKEN:-}
       # Web Push (notificação no celular/desktop mesmo com o CRM fechado)
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}

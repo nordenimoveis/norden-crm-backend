@@ -83,6 +83,16 @@ const EnvSchema = z.object({
   META_PAGE_ID: z.string().default(''),
   /** Janela (min) de leads considerados "novos" pelo coletor — deve cobrir o intervalo do agendador. */
   META_POLL_LOOKBACK_MIN: z.coerce.number().int().positive().default(20),
+  /**
+   * ID da conta do WhatsApp Business (WABA), para sincronizar o catálogo de
+   * templates de campanha com os aprovados na Meta. Vazio = sincronização desligada.
+   */
+  META_WABA_ID: z.string().default(''),
+  /**
+   * Token para ler os templates (permissão whatsapp_business_management).
+   * Se vazio, usa o META_GRAPH_TOKEN.
+   */
+  META_WABA_TOKEN: z.string().default(''),
 
   /**
    * Web Push (notificação no celular/desktop mesmo com o CRM fechado).
