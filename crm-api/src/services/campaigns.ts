@@ -183,6 +183,53 @@ export async function getCampaign(id: string) {
   return { ...view(c), pending: Number(pending) };
 }
 
+export interface CampaignRecipientView {
+  leadId: string;
+  leadName: string;
+  leadPhone: string | null;
+  brokerName: string | null;
+  status: string;
+  error: string | null;
+  sentAt: Date | null;
+  /** O cliente respondeu depois do envio (virou atendimento). */
+  responded: boolean;
+}
+
+/** Lista os destinatários de uma campanha, com status e se o cliente respondeu. */
+export async function listCampaignRecipients(id: string): Promise<CampaignRecipientView[]> {
+  const [c] = await db.select({ id: campaigns.id }).from(campaigns).where(eq(campaigns.id, id));
+  if (!c) throw notFound('Campanha');
+
+  const rows = await db
+    .select({
+      leadId: campaignRecipients.leadId,
+      status: campaignRecipients.status,
+      error: campaignRecipients.error,
+      sentAt: campaignRecipients.sentAt,
+      leadName: leads.name,
+      leadPhone: leads.phone,
+      lastInboundAt: leads.lastInboundAt,
+      brokerName: users.name,
+    })
+    .from(campaignRecipients)
+    .innerJoin(leads, eq(leads.id, campaignRecipients.leadId))
+    .leftJoin(users, eq(users.id, leads.brokerId))
+    .where(eq(campaignRecipients.campaignId, id))
+    .orderBy(asc(leads.name))
+    .limit(2000);
+
+  return rows.map((r) => ({
+    leadId: r.leadId,
+    leadName: r.leadName,
+    leadPhone: r.leadPhone,
+    brokerName: r.brokerName ?? null,
+    status: r.status,
+    error: r.error,
+    sentAt: r.sentAt,
+    responded: Boolean(r.sentAt && r.lastInboundAt && r.lastInboundAt.getTime() >= r.sentAt.getTime()),
+  }));
+}
+
 /** Cria a campanha como RASCUNHO, CONGELANDO o público no momento. */
 export async function createCampaign(
   input: { name: string; templateId: string; filters: AudienceFilters },

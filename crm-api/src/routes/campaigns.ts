@@ -74,6 +74,11 @@ export default async function campaignRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>('/campaigns/:id', async (req) => svc.getCampaign(req.params.id));
 
+  /** Destinatários da campanha, com status e se o cliente respondeu. */
+  app.get<{ Params: { id: string } }>('/campaigns/:id/recipients', async (req) =>
+    svc.listCampaignRecipients(req.params.id),
+  );
+
   app.post('/campaigns', async (req, reply) => {
     const b = z
       .object({ name: z.string().min(1).max(120), templateId: z.string().uuid(), filters: AudienceSchema })
