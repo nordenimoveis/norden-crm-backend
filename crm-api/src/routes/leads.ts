@@ -12,6 +12,7 @@ import { chatwoot } from '../services/chatwoot.js';
 import { ingestLead } from '../services/leads.js';
 import { assertActiveLossReason } from '../services/loss-reasons.js';
 import { STAGE_ROLE, assertStageKey } from '../services/pipeline.js';
+import { pickNextBroker } from '../services/roleta.js';
 import { logEvent } from '../services/timeline.js';
 
 const ListQuery = z.object({
@@ -23,6 +24,8 @@ const ListQuery = z.object({
   campaign: z.string().optional(),
   /** Filtra por uma etiqueta (ex.: "Proprietário", "Base Antiga"). */
   tag: z.string().optional(),
+  /** Só leads que já responderam (têm mensagem de entrada). */
+  responded: z.coerce.boolean().optional(),
   q: z.string().trim().min(2).optional(),
   includeOld: z.coerce.boolean().default(false),
   limit: z.coerce.number().int().min(1).max(500).default(300),
@@ -111,6 +114,7 @@ export default async function leadRoutes(app: FastifyInstance) {
     if (q.source) conds.push(eq(leads.source, q.source));
     if (q.campaign) conds.push(eq(leads.campaign, q.campaign));
     if (q.tag) conds.push(sql`${q.tag} = ANY(${leads.tags})`);
+    if (q.responded) conds.push(isNotNull(leads.lastInboundAt));
     if (q.brokerId && isManager(req.user)) conds.push(eq(leads.brokerId, q.brokerId));
     if (!q.includeOld && q.source !== 'BASE_ANTIGA') conds.push(ne(leads.source, 'BASE_ANTIGA'));
     if (q.q) conds.push(or(ilike(leads.name, `%${q.q}%`), ilike(leads.phone, `%${q.q.replace(/\D/g, '') || q.q}%`), ilike(leads.email, `%${q.q}%`)));
@@ -141,6 +145,46 @@ export default async function leadRoutes(app: FastifyInstance) {
       .groupBy(leads.campaign)
       .orderBy(desc(count()));
     return rows.map((r) => ({ campaign: r.campaign ?? '', total: Number(r.total) }));
+  });
+
+  /**
+   * Caixa "Responderam": quantos leads da Base Antiga (campanha) já responderam
+   * e ainda não foram para o funil. Alimenta o contador do menu.
+   */
+  app.get('/leads/inbox-count', async (req) => {
+    const scope = leadScope(req.user);
+    const conds = [eq(leads.source, 'BASE_ANTIGA'), isNotNull(leads.lastInboundAt)];
+    if (scope) conds.push(scope);
+    const [{ total }] = await db.select({ total: count() }).from(leads).where(and(...conds));
+    return { count: Number(total) };
+  });
+
+  /**
+   * "Trazer para o funil": tira o lead da Base Antiga e o coloca no funil ativo,
+   * atribuindo um corretor pela roleta (se ainda não tiver). Mantém a etiqueta de
+   * origem. Usado na triagem dos leads de campanha que responderam.
+   */
+  app.post<{ Params: { id: string } }>('/leads/:id/promote', async (req) => {
+    const lead = await loadLeadFor(req, req.params.id);
+    const now = new Date();
+    const updated = await db.transaction(async (tx) => {
+      let brokerId = lead.brokerId;
+      if (!brokerId) {
+        const broker = await pickNextBroker(tx);
+        brokerId = broker?.id ?? null;
+      }
+      // Fora da Base Antiga (deixa de ficar escondido no funil); mantém etiqueta/origem.
+      const [row] = await tx
+        .update(leads)
+        .set({ source: 'WHATSAPP_DIRETO', brokerId, updatedAt: now })
+        .where(eq(leads.id, lead.id))
+        .returning();
+      await logEvent(tx, lead.id, 'lead.promoted', { from: 'BASE_ANTIGA', brokerId }, req.user.id);
+      return row!;
+    });
+    const [broker] = updated.brokerId ? await db.select({ name: users.name }).from(users).where(eq(users.id, updated.brokerId)) : [];
+    bus.publish({ type: 'lead.updated', leadId: updated.id, brokerId: updated.brokerId });
+    return view({ ...updated, brokerName: broker?.name });
   });
 
   app.get<{ Params: { id: string } }>('/leads/:id', async (req) => {

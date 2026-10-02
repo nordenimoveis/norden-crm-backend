@@ -6,6 +6,7 @@ export type EventType =
   | 'lead.reentry'
   | 'lead.assigned'
   | 'lead.transferred'
+  | 'lead.promoted'
   | 'lead.updated'
   | 'cadence.scheduled'
   | 'cadence.sent'
