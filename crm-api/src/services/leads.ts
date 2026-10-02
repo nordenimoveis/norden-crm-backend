@@ -56,6 +56,8 @@ export async function ingestLead(input: IngestInput): Promise<IngestResult> {
       const patch: Partial<Lead> = { updatedAt: new Date() };
       if (!existing.email && email) patch.email = email;
       if (!existing.interest && input.interest) patch.interest = input.interest;
+      // Preenche a origem/campanha quando ainda não houver (ex.: backfill da Base Antiga pelo media_source do Imobzi)
+      if (!existing.campaign && input.campaign) patch.campaign = input.campaign;
       // Lead frio que volta a demonstrar interesse retorna para "Novo Lead" (sem reiniciar a cadência)
       if (existing.stage === 'LEAD_FRIO' && input.source !== 'BASE_ANTIGA') patch.stage = 'NOVO_LEAD';
       const [updated] = await tx.update(leads).set(patch).where(eq(leads.id, existing.id)).returning();
@@ -71,7 +73,7 @@ export async function ingestLead(input: IngestInput): Promise<IngestResult> {
     if (input.source === 'BASE_ANTIGA') {
       const [lead] = await tx
         .insert(leads)
-        .values({ name, phone, email, source: 'BASE_ANTIGA', externalId: input.externalId, interest: input.interest, notes: input.notes, tags: [TAG_BASE_ANTIGA] })
+        .values({ name, phone, email, source: 'BASE_ANTIGA', externalId: input.externalId, campaign: input.campaign, interest: input.interest, notes: input.notes, tags: [TAG_BASE_ANTIGA] })
         .returning();
       await logEvent(tx, lead!.id, 'lead.created', { source: 'BASE_ANTIGA', raw: input.raw ?? {} });
       return { lead: lead!, created: true, broker: null };
