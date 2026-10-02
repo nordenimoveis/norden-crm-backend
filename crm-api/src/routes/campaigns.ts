@@ -6,6 +6,7 @@ const AudienceSchema = z.object({
   stages: z.array(z.string()).optional(),
   temperatures: z.array(z.string()).optional(),
   sources: z.array(z.string()).optional(),
+  campaigns: z.array(z.string()).optional(),
   brokerId: z.string().uuid().nullish(),
   includeOld: z.boolean().optional(),
 });

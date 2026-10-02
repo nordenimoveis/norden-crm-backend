@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, ne, or, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, ilike, isNotNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/client.js';
@@ -19,6 +19,8 @@ const ListQuery = z.object({
   temperature: z.enum(leadTemperature.enumValues).optional(),
   source: z.enum(leadSource.enumValues).optional(),
   brokerId: z.string().uuid().optional(),
+  /** Nome da campanha do Meta Ads (origem do lead). */
+  campaign: z.string().optional(),
   q: z.string().trim().min(2).optional(),
   includeOld: z.coerce.boolean().default(false),
   limit: z.coerce.number().int().min(1).max(500).default(300),
@@ -105,6 +107,7 @@ export default async function leadRoutes(app: FastifyInstance) {
     if (q.stage) conds.push(eq(leads.stage, q.stage));
     if (q.temperature) conds.push(eq(leads.temperature, q.temperature));
     if (q.source) conds.push(eq(leads.source, q.source));
+    if (q.campaign) conds.push(eq(leads.campaign, q.campaign));
     if (q.brokerId && isManager(req.user)) conds.push(eq(leads.brokerId, q.brokerId));
     if (!q.includeOld && q.source !== 'BASE_ANTIGA') conds.push(ne(leads.source, 'BASE_ANTIGA'));
     if (q.q) conds.push(or(ilike(leads.name, `%${q.q}%`), ilike(leads.phone, `%${q.q.replace(/\D/g, '') || q.q}%`), ilike(leads.email, `%${q.q}%`)));
@@ -117,6 +120,24 @@ export default async function leadRoutes(app: FastifyInstance) {
       .orderBy(desc(leads.updatedAt))
       .limit(q.limit);
     return rows.map((r) => view({ ...r.lead, brokerName: r.brokerName }));
+  });
+
+  /**
+   * Listas por campanha do Meta Ads: cada campanha de origem com a contagem de
+   * leads. Respeita o isolamento (corretor só vê as suas). Serve para filtrar o
+   * funil e para montar o público de um disparo por campanha de origem.
+   */
+  app.get('/lead-campaigns', async (req) => {
+    const scope = leadScope(req.user);
+    const conds = [isNotNull(leads.campaign), ne(leads.campaign, '')];
+    if (scope) conds.push(scope);
+    const rows = await db
+      .select({ campaign: leads.campaign, total: count() })
+      .from(leads)
+      .where(and(...conds))
+      .groupBy(leads.campaign)
+      .orderBy(desc(count()));
+    return rows.map((r) => ({ campaign: r.campaign ?? '', total: Number(r.total) }));
   });
 
   app.get<{ Params: { id: string } }>('/leads/:id', async (req) => {

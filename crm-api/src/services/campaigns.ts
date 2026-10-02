@@ -131,6 +131,8 @@ export interface AudienceFilters {
   stages?: string[];
   temperatures?: string[];
   sources?: string[];
+  /** Campanhas de origem do Meta Ads (leads.campaign). */
+  campaigns?: string[];
   brokerId?: string | null;
   includeOld?: boolean;
 }
@@ -140,6 +142,7 @@ function audienceConditions(f: AudienceFilters) {
   if (f.stages?.length) conds.push(inArray(leads.stage, f.stages));
   if (f.temperatures?.length) conds.push(inArray(leads.temperature, f.temperatures as never));
   if (f.sources?.length) conds.push(inArray(leads.source, f.sources as never));
+  if (f.campaigns?.length) conds.push(inArray(leads.campaign, f.campaigns));
   if (f.brokerId) conds.push(eq(leads.brokerId, f.brokerId));
   const wantsOld = f.includeOld || f.sources?.includes('BASE_ANTIGA');
   if (!wantsOld) conds.push(ne(leads.source, 'BASE_ANTIGA'));
