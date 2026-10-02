@@ -87,6 +87,7 @@ function view(l: Lead & { brokerName?: string | null }) {
     notes: l.notes,
     hasConversation: Boolean(l.chatwootConversationId),
     lastInboundAt: l.lastInboundAt,
+    lastReadAt: l.lastReadAt,
     aiSummary: l.aiSummary,
     aiSuggestedTemperature: l.aiSuggestedTemperature,
     aiUpdatedAt: l.aiUpdatedAt,
@@ -153,10 +154,22 @@ export default async function leadRoutes(app: FastifyInstance) {
    */
   app.get('/leads/inbox-count', async (req) => {
     const scope = leadScope(req.user);
-    const conds = [eq(leads.source, 'BASE_ANTIGA'), isNotNull(leads.lastInboundAt)];
+    const conds = [
+      eq(leads.source, 'BASE_ANTIGA'),
+      isNotNull(leads.lastInboundAt),
+      // não lido = respondeu depois da última leitura (ou nunca foi lido)
+      sql`(${leads.lastReadAt} is null or ${leads.lastInboundAt} > ${leads.lastReadAt})`,
+    ];
     if (scope) conds.push(scope);
     const [{ total }] = await db.select({ total: count() }).from(leads).where(and(...conds));
     return { count: Number(total) };
+  });
+
+  /** Marca a conversa do lead como lida (controle persistente de "não lido"). */
+  app.post<{ Params: { id: string } }>('/leads/:id/read', async (req) => {
+    const lead = await loadLeadFor(req, req.params.id);
+    await db.update(leads).set({ lastReadAt: new Date() }).where(eq(leads.id, lead.id));
+    return { ok: true };
   });
 
   /**

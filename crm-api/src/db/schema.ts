@@ -134,6 +134,8 @@ export const leads = pgTable(
     chatwootContactId: integer('chatwoot_contact_id'),
     chatwootConversationId: integer('chatwoot_conversation_id'),
     lastInboundAt: timestamp('last_inbound_at', { withTimezone: true }),
+    /** Última vez que a conversa foi aberta/lida (controle de "não lido"). */
+    lastReadAt: timestamp('last_read_at', { withTimezone: true }),
     aiSummary: text('ai_summary'),
     aiSuggestedTemperature: leadTemperature('ai_suggested_temperature'),
     aiUpdatedAt: timestamp('ai_updated_at', { withTimezone: true }),
