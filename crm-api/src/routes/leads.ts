@@ -21,6 +21,8 @@ const ListQuery = z.object({
   brokerId: z.string().uuid().optional(),
   /** Nome da campanha do Meta Ads (origem do lead). */
   campaign: z.string().optional(),
+  /** Filtra por uma etiqueta (ex.: "Proprietário", "Base Antiga"). */
+  tag: z.string().optional(),
   q: z.string().trim().min(2).optional(),
   includeOld: z.coerce.boolean().default(false),
   limit: z.coerce.number().int().min(1).max(500).default(300),
@@ -108,6 +110,7 @@ export default async function leadRoutes(app: FastifyInstance) {
     if (q.temperature) conds.push(eq(leads.temperature, q.temperature));
     if (q.source) conds.push(eq(leads.source, q.source));
     if (q.campaign) conds.push(eq(leads.campaign, q.campaign));
+    if (q.tag) conds.push(sql`${q.tag} = ANY(${leads.tags})`);
     if (q.brokerId && isManager(req.user)) conds.push(eq(leads.brokerId, q.brokerId));
     if (!q.includeOld && q.source !== 'BASE_ANTIGA') conds.push(ne(leads.source, 'BASE_ANTIGA'));
     if (q.q) conds.push(or(ilike(leads.name, `%${q.q}%`), ilike(leads.phone, `%${q.q.replace(/\D/g, '') || q.q}%`), ilike(leads.email, `%${q.q}%`)));
