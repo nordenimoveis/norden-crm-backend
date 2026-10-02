@@ -305,7 +305,11 @@ export async function deleteCampaign(id: string): Promise<void> {
   const [c] = await db.select().from(campaigns).where(eq(campaigns.id, id));
   if (!c) throw notFound('Campanha');
   if (c.status === 'ENVIANDO') throw new HttpError(409, 'Cancele a campanha antes de excluí-la.');
-  await db.delete(campaigns).where(eq(campaigns.id, id));
+  // Apaga os destinatários explicitamente (não depende do ON DELETE CASCADE do banco).
+  await db.transaction(async (tx) => {
+    await tx.delete(campaignRecipients).where(eq(campaignRecipients.campaignId, id));
+    await tx.delete(campaigns).where(eq(campaigns.id, id));
+  });
 }
 
 /* ------------------------------ Executor (n8n) ------------------------------ */
