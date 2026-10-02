@@ -83,6 +83,13 @@ const EnvSchema = z.object({
   META_PAGE_ID: z.string().default(''),
   /** Janela (min) de leads considerados "novos" pelo coletor — deve cobrir o intervalo do agendador. */
   META_POLL_LOOKBACK_MIN: z.coerce.number().int().positive().default(20),
+
+  /**
+   * Importação da base de Contatos do Imobzi pela API REST (carga única/repetível).
+   * Segredo gerado no Imobzi (Integrações/API). Vazio = importação desligada.
+   */
+  IMOBZI_API_BASE_URL: z.string().url().default('https://api.imobzi.app'),
+  IMOBZI_API_SECRET: z.string().default(''),
   /**
    * ID da conta do WhatsApp Business (WABA), para sincronizar o catálogo de
    * templates de campanha com os aprovados na Meta. Vazio = sincronização desligada.

@@ -7,6 +7,7 @@ import { buildContext, renderTemplate } from '../src/lib/template.js';
 import { mapImobziPayload } from '../src/lib/imobzi.js';
 import { cleanFormName } from '../src/lib/meta-leads.js';
 import { mapBodyVariables } from '../src/lib/meta-templates.js';
+import { contactName, contactPhone, contactEmail, isOwner } from '../src/lib/imobzi-api.js';
 
 const W = { timezone: 'America/Sao_Paulo', startHour: 9, endHour: 19 };
 const at = (iso: string) => DateTime.fromISO(iso, { zone: W.timezone }).toJSDate();
@@ -60,6 +61,30 @@ test('variáveis do template da Meta viram tokens do CRM', () => {
   // Variável repetida entra uma vez só nas fontes.
   const d = mapBodyVariables('{{1}}, confirmo com você, {{1}}.');
   assert.deepEqual(d.paramSources, ['{{lead_first_name}}']);
+});
+
+test('mapeamento de contato do Imobzi (API)', () => {
+  const c = {
+    fullname: 'Maria Silva',
+    phones: [{ number: '51 99954-9115', number_plain: '51999549115', type: 'mobile' }],
+    email: 'maria@x.com',
+    tags: ['contact', 'leads'],
+  };
+  assert.equal(contactName(c), 'Maria Silva');
+  assert.equal(contactPhone(c), '51999549115');
+  assert.equal(contactEmail(c), 'maria@x.com');
+  assert.equal(isOwner(c), false);
+
+  // "Não informado" vira nome neutro; proprietário detectado pela tag.
+  assert.equal(contactName({ fullname: 'Naoinformado' }), 'Contato Imobzi');
+  assert.equal(contactName({ name: 'Não informado' }), 'Contato Imobzi');
+  assert.equal(isOwner({ tags: ['Proprietário', 'owner'] }), true);
+  assert.equal(contactPhone({ phones: [] }), null);
+  // prefere o celular quando há vários
+  assert.equal(
+    contactPhone({ phones: [{ number_plain: '4833334444', type: 'phone' }, { number_plain: '48999990000', type: 'mobile' }] }),
+    '48999990000',
+  );
 });
 
 test('mapeamento tolerante do Imobzi', () => {

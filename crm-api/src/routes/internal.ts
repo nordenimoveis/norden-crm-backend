@@ -5,6 +5,7 @@ import { notFound } from '../lib/errors.js';
 import { applyAiResult } from '../services/ai.js';
 import { runDueSteps } from '../services/cadence.js';
 import { runDueCampaigns } from '../services/campaigns.js';
+import { importImobziContacts } from '../services/imobzi-import.js';
 import { ingestLead } from '../services/leads.js';
 import { runMetaPoll } from '../services/meta-poll.js';
 
@@ -43,6 +44,12 @@ export default async function internalRoutes(app: FastifyInstance) {
 
   /** Coletor de leads do Meta (puxa leads novos dos formulários, sem depender do webhook). */
   app.post('/internal/meta/poll', async () => runMetaPoll());
+
+  /** Importa os Contatos do Imobzi como Base Antiga. dryRun só conta; max limita o lote. */
+  app.post('/internal/imobzi/import', async (req) => {
+    const b = z.object({ max: z.number().int().positive().optional(), dryRun: z.boolean().optional() }).parse(req.body ?? {});
+    return importImobziContacts(b);
+  });
 
   app.post('/internal/ai/result', async (req) => {
     const b = AiBody.parse(req.body);
