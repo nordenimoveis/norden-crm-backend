@@ -186,6 +186,45 @@ export default async function conversationRoutes(app: FastifyInstance) {
     return reply.code(201).send(toView(msg));
   });
 
+  /**
+   * Retomada de contato (fora da janela de 24h): envia o template de retomada
+   * com um assunto escrito pelo corretor ({{3}}). Reabre a conversa de forma
+   * leve, a partir do que estava sendo tratado. Respeita CADENCE_SEND_ENABLED.
+   */
+  app.post<{ Params: { id: string } }>('/leads/:id/reengage', async (req, reply) => {
+    const { subject } = z.object({ subject: z.string().trim().min(1).max(120) }).parse(req.body);
+    const lead = await loadLeadFor(req, req.params.id);
+    const broker = await loadBroker(lead.brokerId);
+    const ctx = buildContext(lead, broker);
+    const name = env().TEMPLATE_RETOMADA;
+    const params = [ctx.lead_first_name ?? '', ctx.broker_first_name ?? '', subject];
+    const preview = `Oi ${ctx.lead_first_name || 'tudo bem'}, tudo bem? Aqui é ${ctx.broker_first_name || 'a Norden'}, da Norden Imóveis. Passando para retomar nossa conversa sobre ${subject}. Fico à disposição para seguir de onde paramos — é só me chamar.`;
+    const dryRun = !env().CADENCE_SEND_ENABLED;
+
+    const conversationId = await ensureConversation(lead, broker);
+    const token = req.user.id === broker?.id ? brokerToken(broker) : undefined;
+
+    let view: unknown = { simulated: true, preview };
+    if (!dryRun) {
+      const msg = await chatwoot().sendTemplate(conversationId, { name, params }, preview, token);
+      view = toView(msg);
+    }
+
+    const now = new Date();
+    const updated = await db.transaction(async (tx) => {
+      await cancelPendingSteps(tx, lead.id, 'Corretor retomou o contato');
+      await cancelPendingTasks(tx, lead.id, 'Corretor retomou o contato');
+      const stage = lead.stage === 'AGUARDANDO_RESPOSTA' || lead.stage === 'NOVO_LEAD' ? 'EM_ATENDIMENTO' : lead.stage;
+      const tags = Array.from(new Set([...lead.tags, TAG_ATENDIMENTO_HUMANO]));
+      const [row] = await tx.update(leads).set({ stage, tags, updatedAt: now }).where(eq(leads.id, lead.id)).returning();
+      await logEvent(tx, lead.id, dryRun ? 'template.simulated' : 'template.sent', { name, subject }, req.user.id);
+      return row!;
+    });
+
+    bus.publish({ type: 'lead.updated', leadId: updated.id, brokerId: updated.brokerId });
+    return reply.code(201).send(view);
+  });
+
   /** Nota interna (não vai para o cliente). */
   app.post<{ Params: { id: string } }>('/leads/:id/notes', async (req, reply) => {
     const { content } = z.object({ content: z.string().trim().min(1).max(4000) }).parse(req.body);

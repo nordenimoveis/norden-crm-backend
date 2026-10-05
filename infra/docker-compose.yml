@@ -177,6 +177,7 @@ services:
       TEMPLATE_STEP_3: ${TEMPLATE_STEP_3:-norden_off_market}
       TEMPLATE_STEP_4: ${TEMPLATE_STEP_4:-norden_apoio}
       TEMPLATE_STEP_5: ${TEMPLATE_STEP_5:-norden_despedida}
+      TEMPLATE_RETOMADA: ${TEMPLATE_RETOMADA:-norden_retomada}
       WELCOME_WITH_PRODUCT: ${WELCOME_WITH_PRODUCT:-false}
       TEMPLATE_PRODUCT_FALLBACK: ${TEMPLATE_PRODUCT_FALLBACK:-os empreendimentos em Jurerê}
     depends_on:
