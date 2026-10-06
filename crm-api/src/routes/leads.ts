@@ -24,6 +24,10 @@ const ListQuery = z.object({
   campaign: z.string().optional(),
   /** Filtra por uma etiqueta (ex.: "Proprietário", "Base Antiga"). */
   tag: z.string().optional(),
+  /** Filtra pelo empreendimento/produto de interesse. */
+  interest: z.string().optional(),
+  /** Filtra pelo motivo de perda (na etapa Perdido). */
+  lossReasonId: z.string().uuid().optional(),
   /** Só leads que já responderam (têm mensagem de entrada). */
   responded: z.coerce.boolean().optional(),
   /** Filtra pela campanha que a última resposta está respondendo (caixa por campanha). */
@@ -121,6 +125,8 @@ export default async function leadRoutes(app: FastifyInstance) {
     if (q.source) conds.push(eq(leads.source, q.source));
     if (q.campaign) conds.push(eq(leads.campaign, q.campaign));
     if (q.tag) conds.push(sql`${q.tag} = ANY(${leads.tags})`);
+    if (q.interest) conds.push(eq(leads.interest, q.interest));
+    if (q.lossReasonId) conds.push(eq(leads.lostReasonId, q.lossReasonId));
     if (q.responded) conds.push(isNotNull(leads.lastInboundAt));
     if (q.respondingCampaignId) conds.push(eq(leads.lastCampaignId, q.respondingCampaignId));
     if (q.respondingCampaign === 'none') conds.push(sql`${leads.lastCampaignId} is null`);
@@ -155,6 +161,23 @@ export default async function leadRoutes(app: FastifyInstance) {
       .groupBy(leads.campaign)
       .orderBy(desc(count()));
     return rows.map((r) => ({ campaign: r.campaign ?? '', total: Number(r.total) }));
+  });
+
+  /**
+   * Empreendimentos/produtos distintos (de leads.interest) com contagem, para o
+   * filtro por produto do funil. Respeita o isolamento por corretor.
+   */
+  app.get('/leads/interests', async (req) => {
+    const scope = leadScope(req.user);
+    const conds = [isNotNull(leads.interest), ne(leads.interest, '')];
+    if (scope) conds.push(scope);
+    const rows = await db
+      .select({ interest: leads.interest, total: count() })
+      .from(leads)
+      .where(and(...conds))
+      .groupBy(leads.interest)
+      .orderBy(desc(count()));
+    return rows.map((r) => ({ interest: r.interest ?? '', total: Number(r.total) }));
   });
 
   /**
