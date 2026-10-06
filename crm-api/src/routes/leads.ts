@@ -134,8 +134,8 @@ export default async function leadRoutes(app: FastifyInstance) {
     if (q.responded) conds.push(isNotNull(leads.lastInboundAt));
     if (q.respondingCampaignId) conds.push(eq(leads.lastCampaignId, q.respondingCampaignId));
     if (q.respondingCampaign === 'none') conds.push(sql`${leads.lastCampaignId} is null`);
-    // 'NOVO' inclui quem respondeu antes do recurso (inbox_status null).
-    if (q.inboxStatus === 'NOVO') conds.push(sql`(${leads.inboxStatus} = 'NOVO' or ${leads.inboxStatus} is null)`);
+    // 'NOVO' inclui quem respondeu antes do recurso (inbox_status null) e nunca mostra perdido.
+    if (q.inboxStatus === 'NOVO') conds.push(sql`(${leads.inboxStatus} = 'NOVO' or ${leads.inboxStatus} is null) and ${leads.lostAt} is null`);
     else if (q.inboxStatus) conds.push(eq(leads.inboxStatus, q.inboxStatus));
     if (q.brokerId && isManager(req.user)) conds.push(eq(leads.brokerId, q.brokerId));
     // Kanban mostra só o funil ativo; "Base Antiga" (includeOld) ou filtro por origem liberam o resto.
@@ -197,8 +197,8 @@ export default async function leadRoutes(app: FastifyInstance) {
     const conds = [
       eq(leads.source, 'BASE_ANTIGA'),
       isNotNull(leads.lastInboundAt),
-      // só os ainda não triados ("Novos"); null = respondeu antes do recurso
-      sql`(${leads.inboxStatus} = 'NOVO' or ${leads.inboxStatus} is null)`,
+      // só os ainda não triados ("Novos"); null = respondeu antes do recurso; nunca perdido
+      sql`(${leads.inboxStatus} = 'NOVO' or ${leads.inboxStatus} is null) and ${leads.lostAt} is null`,
       // não lido = respondeu depois da última leitura (ou nunca foi lido)
       sql`(${leads.lastReadAt} is null or ${leads.lastInboundAt} > ${leads.lastReadAt})`,
     ];
@@ -223,7 +223,7 @@ export default async function leadRoutes(app: FastifyInstance) {
     const c = (expr: ReturnType<typeof sql>) => sql<number>`count(*) filter (where ${expr})`;
     const [row] = await db
       .select({
-        novos: c(sql`${leads.inboxStatus} = 'NOVO' or ${leads.inboxStatus} is null`),
+        novos: c(sql`(${leads.inboxStatus} = 'NOVO' or ${leads.inboxStatus} is null) and ${leads.lostAt} is null`),
         acompanhando: c(sql`${leads.inboxStatus} = 'ACOMPANHANDO'`),
         semInteresse: c(sql`${leads.inboxStatus} = 'SEM_INTERESSE'`),
         qualificados: c(sql`${leads.inboxStatus} = 'QUALIFICADO'`),
@@ -438,10 +438,14 @@ export default async function leadRoutes(app: FastifyInstance) {
       await assertActiveLossReason(reasonId);
       set.lostReasonId = reasonId;
       set.lostAt = now;
+      // Mantém a triagem em sincronia: perdido = "Sem interesse" na caixa.
+      if (lead.inboxStatus) set.inboxStatus = 'SEM_INTERESSE';
     } else if (leavingLost) {
       // Saindo de "Perdido": recupera o lead (limpa motivo e data).
       set.lostReasonId = null;
       set.lostAt = null;
+      // Reabre na triagem como "Novo" (se era um lead da caixa).
+      if (lead.inboxStatus === 'SEM_INTERESSE') set.inboxStatus = 'NOVO';
     } else if (b.lossReasonId !== undefined && lead.lostAt !== null) {
       // Ajuste do motivo sem trocar de etapa.
       if (b.lossReasonId) await assertActiveLossReason(b.lossReasonId);

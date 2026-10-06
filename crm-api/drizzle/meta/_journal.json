@@ -64,6 +64,13 @@
       "when": 1791308000724,
       "tag": "0008_sharp_maggott",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791308945244,
+      "tag": "0009_fix_inbox_status",
+      "breakpoints": true
     }
   ]
 }
