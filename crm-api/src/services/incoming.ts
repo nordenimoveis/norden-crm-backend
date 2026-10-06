@@ -72,11 +72,26 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
   const now = new Date();
   // Qual campanha esta resposta está respondendo (disparo mais recente antes dela).
   const respondingCampaignId = await findRespondingCampaign(target.id, now);
+  const isInboxLead = target.source === 'BASE_ANTIGA';
+  // Reengajamento: respondeu a um disparo DIFERENTE do último tratado e não está
+  // ativo no funil → volta para "Novos" daquela campanha (nova oportunidade).
+  const newDisparo = Boolean(respondingCampaignId && respondingCampaignId !== target.lastCampaignId);
+  const reengage = isInboxLead && newDisparo && !target.inFunnel;
+  // Reabrir um lead que estava Perdido quando reengaja por um disparo novo.
+  const reopeningLost = reengage && target.lostAt !== null;
+
   const updated = await db.transaction(async (tx) => {
     await cancelPendingSteps(tx, target.id, 'Cliente respondeu');
     await cancelPendingTasks(tx, target.id, 'Cliente respondeu');
     const tags = Array.from(new Set([...target.tags, TAG_ATENDIMENTO_HUMANO]));
-    const stage = target.stage === 'NOVO_LEAD' || target.stage === 'LEAD_FRIO' ? 'AGUARDANDO_RESPOSTA' : target.stage;
+    const stage = reopeningLost || target.stage === 'NOVO_LEAD' || target.stage === 'LEAD_FRIO'
+      ? 'AGUARDANDO_RESPOSTA'
+      : target.stage;
+    // Estado de triagem: reengajou → "Novo"; 1ª resposta da base → "Novo".
+    const inboxPatch =
+      reengage ? { inboxStatus: 'NOVO' as const }
+      : isInboxLead && !target.inboxStatus ? { inboxStatus: 'NOVO' as const }
+      : {};
     const [row] = await tx
       .update(leads)
       .set({
@@ -85,14 +100,15 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
         stage,
         chatwootConversationId: conversationId,
         ...(respondingCampaignId ? { lastCampaignId: respondingCampaignId } : {}),
-        // Lead da Base Antiga que responde entra na triagem como "Novo" (1ª vez).
-        ...(target.source === 'BASE_ANTIGA' && !target.inboxStatus ? { inboxStatus: 'NOVO' as const } : {}),
+        ...inboxPatch,
+        ...(reopeningLost ? { lostAt: null, lostReasonId: null } : {}),
         ...(origin?.patch ?? {}),
         updatedAt: now,
       })
       .where(eq(leads.id, target.id))
       .returning();
     await logEvent(tx, target.id, 'message.inbound', { messageId: p.id, preview: (p.content ?? '').slice(0, 200) });
+    if (reengage) await logEvent(tx, target.id, 'lead.reentry', { campaignId: respondingCampaignId, reopenedFromLost: reopeningLost });
     if (origin?.patch) await logEvent(tx, target.id, 'lead.enriched', origin.detail);
     return row!;
   });
