@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, lte } from 'drizzle-orm';
 import { env } from '../config.js';
 import { db } from '../db/client.js';
-import { leads, type Lead } from '../db/schema.js';
+import { campaignRecipients, leads, type Lead } from '../db/schema.js';
 import { bus } from '../lib/events.js';
 import {
   type CtwaReferral,
@@ -78,6 +78,8 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
     : null;
 
   const now = new Date();
+  // Qual campanha esta resposta está respondendo (disparo mais recente antes dela).
+  const respondingCampaignId = await findRespondingCampaign(target.id, now);
   const updated = await db.transaction(async (tx) => {
     await cancelPendingSteps(tx, target.id, 'Cliente respondeu');
     await cancelPendingTasks(tx, target.id, 'Cliente respondeu');
@@ -85,7 +87,15 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
     const stage = target.stage === 'NOVO_LEAD' || target.stage === 'LEAD_FRIO' ? 'AGUARDANDO_RESPOSTA' : target.stage;
     const [row] = await tx
       .update(leads)
-      .set({ lastInboundAt: now, tags, stage, chatwootConversationId: conversationId, ...(origin?.patch ?? {}), updatedAt: now })
+      .set({
+        lastInboundAt: now,
+        tags,
+        stage,
+        chatwootConversationId: conversationId,
+        ...(respondingCampaignId ? { lastCampaignId: respondingCampaignId } : {}),
+        ...(origin?.patch ?? {}),
+        updatedAt: now,
+      })
       .where(eq(leads.id, target.id))
       .returning();
     await logEvent(tx, target.id, 'message.inbound', { messageId: p.id, preview: (p.content ?? '').slice(0, 200) });
@@ -123,6 +133,31 @@ function extractPhone(p: ChatwootWebhook): string | null {
       p.conversation?.contact_inbox?.source_id ??
       null,
   );
+}
+
+/** Janela para associar uma resposta a uma campanha (dias). */
+const CAMPAIGN_REPLY_WINDOW_DAYS = 30;
+
+/**
+ * Acha a campanha que a resposta do cliente está respondendo: o disparo mais
+ * recente enviado a este lead dentro da janela. Null = resposta direta (sem campanha).
+ */
+async function findRespondingCampaign(leadId: string, now: Date): Promise<string | null> {
+  const floor = new Date(now.getTime() - CAMPAIGN_REPLY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const [row] = await db
+    .select({ campaignId: campaignRecipients.campaignId })
+    .from(campaignRecipients)
+    .where(
+      and(
+        eq(campaignRecipients.leadId, leadId),
+        isNotNull(campaignRecipients.sentAt),
+        gte(campaignRecipients.sentAt, floor),
+        lte(campaignRecipients.sentAt, now),
+      ),
+    )
+    .orderBy(desc(campaignRecipients.sentAt))
+    .limit(1);
+  return row?.campaignId ?? null;
 }
 
 /**

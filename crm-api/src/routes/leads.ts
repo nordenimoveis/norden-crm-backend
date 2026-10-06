@@ -2,7 +2,7 @@ import { and, count, desc, eq, ilike, isNotNull, ne, or, sql, type SQL } from 'd
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/client.js';
-import { cadenceSteps, leadEvents, leadSource, leads, leadTemperature, users, type Lead } from '../db/schema.js';
+import { cadenceSteps, campaigns, leadEvents, leadSource, leads, leadTemperature, users, type Lead } from '../db/schema.js';
 import { bus } from '../lib/events.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { assertLeadAccess, isManager, leadScope } from '../services/access.js';
@@ -26,6 +26,10 @@ const ListQuery = z.object({
   tag: z.string().optional(),
   /** Só leads que já responderam (têm mensagem de entrada). */
   responded: z.coerce.boolean().optional(),
+  /** Filtra pela campanha que a última resposta está respondendo (caixa por campanha). */
+  respondingCampaignId: z.string().uuid().optional(),
+  /** 'none' = respostas diretas (sem campanha associada). */
+  respondingCampaign: z.enum(['none']).optional(),
   q: z.string().trim().min(2).optional(),
   includeOld: z.coerce.boolean().default(false),
   limit: z.coerce.number().int().min(1).max(500).default(300),
@@ -68,7 +72,7 @@ const UpdateLead = z.object({
 });
 
 /** Campos seguros para a tela (sem IDs internos desnecessários). */
-function view(l: Lead & { brokerName?: string | null }) {
+function view(l: Lead & { brokerName?: string | null; lastCampaignName?: string | null }) {
   return {
     id: l.id,
     name: l.name,
@@ -83,6 +87,8 @@ function view(l: Lead & { brokerName?: string | null }) {
     lostAt: l.lostAt,
     tags: l.tags,
     campaign: l.campaign,
+    lastCampaignId: l.lastCampaignId,
+    lastCampaignName: l.lastCampaignName ?? null,
     interest: l.interest,
     notes: l.notes,
     hasConversation: Boolean(l.chatwootConversationId),
@@ -116,18 +122,21 @@ export default async function leadRoutes(app: FastifyInstance) {
     if (q.campaign) conds.push(eq(leads.campaign, q.campaign));
     if (q.tag) conds.push(sql`${q.tag} = ANY(${leads.tags})`);
     if (q.responded) conds.push(isNotNull(leads.lastInboundAt));
+    if (q.respondingCampaignId) conds.push(eq(leads.lastCampaignId, q.respondingCampaignId));
+    if (q.respondingCampaign === 'none') conds.push(sql`${leads.lastCampaignId} is null`);
     if (q.brokerId && isManager(req.user)) conds.push(eq(leads.brokerId, q.brokerId));
     if (!q.includeOld && q.source !== 'BASE_ANTIGA') conds.push(ne(leads.source, 'BASE_ANTIGA'));
     if (q.q) conds.push(or(ilike(leads.name, `%${q.q}%`), ilike(leads.phone, `%${q.q.replace(/\D/g, '') || q.q}%`), ilike(leads.email, `%${q.q}%`)));
 
     const rows = await db
-      .select({ lead: leads, brokerName: users.name })
+      .select({ lead: leads, brokerName: users.name, lastCampaignName: campaigns.name })
       .from(leads)
       .leftJoin(users, eq(users.id, leads.brokerId))
+      .leftJoin(campaigns, eq(campaigns.id, leads.lastCampaignId))
       .where(and(...conds))
       .orderBy(desc(leads.updatedAt))
       .limit(q.limit);
-    return rows.map((r) => view({ ...r.lead, brokerName: r.brokerName }));
+    return rows.map((r) => view({ ...r.lead, brokerName: r.brokerName, lastCampaignName: r.lastCampaignName }));
   });
 
   /**
@@ -163,6 +172,36 @@ export default async function leadRoutes(app: FastifyInstance) {
     if (scope) conds.push(scope);
     const [{ total }] = await db.select({ total: count() }).from(leads).where(and(...conds));
     return { count: Number(total) };
+  });
+
+  /**
+   * Seletor da caixa "Responderam": agrupa os leads de campanha que responderam
+   * pela campanha que a resposta está respondendo (lastCampaignId). Null vira o
+   * balde "Sem campanha". Cada item traz total e quantos ainda não lidos.
+   */
+  app.get('/leads/responded-campaigns', async (req) => {
+    const scope = leadScope(req.user);
+    const conds = [eq(leads.source, 'BASE_ANTIGA'), isNotNull(leads.lastInboundAt)];
+    if (scope) conds.push(scope);
+    const unreadExpr = sql<number>`count(*) filter (where ${leads.lastReadAt} is null or ${leads.lastInboundAt} > ${leads.lastReadAt})`;
+    const rows = await db
+      .select({
+        campaignId: leads.lastCampaignId,
+        campaignName: campaigns.name,
+        total: count(),
+        unread: unreadExpr,
+      })
+      .from(leads)
+      .leftJoin(campaigns, eq(campaigns.id, leads.lastCampaignId))
+      .where(and(...conds))
+      .groupBy(leads.lastCampaignId, campaigns.name)
+      .orderBy(desc(count()));
+    return rows.map((r) => ({
+      campaignId: r.campaignId,
+      campaignName: r.campaignName ?? null,
+      total: Number(r.total),
+      unread: Number(r.unread),
+    }));
   });
 
   /** Marca a conversa do lead como lida (controle persistente de "não lido"). */

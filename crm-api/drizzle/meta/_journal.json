@@ -43,6 +43,13 @@
       "when": 1790969111967,
       "tag": "0005_remarkable_meltdown",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791299758113,
+      "tag": "0006_youthful_talon",
+      "breakpoints": true
     }
   ]
 }

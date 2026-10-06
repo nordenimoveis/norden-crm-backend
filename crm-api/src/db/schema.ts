@@ -128,6 +128,12 @@ export const leads = pgTable(
     /** ID do lead na origem (Meta leadgen_id, código do Imobzi etc.). */
     externalId: text('external_id'),
     campaign: text('campaign'),
+    /**
+     * Campanha que a última resposta do cliente está respondendo (disparo mais
+     * recente antes da resposta). Dá o contexto certo na caixa "Responderam"
+     * mesmo quando o lead foi tocado por várias campanhas. Null = resposta direta.
+     */
+    lastCampaignId: uuid('last_campaign_id').references(() => campaigns.id, { onDelete: 'set null' }),
     /** Imóvel ou produto de interesse informado na captação. */
     interest: text('interest'),
     notes: text('notes'),
