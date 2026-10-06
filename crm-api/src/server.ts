@@ -15,6 +15,7 @@ import eventRoutes from './routes/events.js';
 import internalRoutes from './routes/internal.js';
 import leadRoutes from './routes/leads.js';
 import lossReasonRoutes from './routes/loss-reasons.js';
+import productRoutes from './routes/products.js';
 import pipelineRoutes from './routes/pipeline.js';
 import pushRoutes from './routes/push.js';
 import quickReplyRoutes from './routes/quick-replies.js';
@@ -72,6 +73,7 @@ export async function buildServer() {
   await app.register(leadRoutes);
   await app.register(pipelineRoutes);
   await app.register(lossReasonRoutes);
+  await app.register(productRoutes);
   await app.register(campaignRoutes);
   await app.register(conversationRoutes);
   await app.register(quickReplyRoutes);

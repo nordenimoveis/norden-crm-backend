@@ -105,6 +105,23 @@ export const lossReasons = pgTable('loss_reasons', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Catálogo de empreendimentos/produtos. Vocabulário gerenciável que dá nome
+ * canônico ao interesse do lead e alimenta a detecção de produto no WhatsApp
+ * (nome + apelidos). Não substitui o texto livre `leads.interest` — apenas o
+ * padroniza e melhora o reconhecimento automático.
+ */
+export const products = pgTable('products', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull().unique(),
+  /** Apelidos/variações para reconhecer o produto no texto do anúncio. */
+  aliases: text('aliases').array().notNull().default(sql`'{}'::text[]`),
+  active: boolean('active').notNull().default(true),
+  position: integer('position').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const leads = pgTable(
   'leads',
   {
@@ -344,6 +361,7 @@ export type LeadTask = typeof leadTasks.$inferSelect;
 export type TaskStatus = (typeof taskStatus.enumValues)[number];
 export type PipelineStage = typeof pipelineStages.$inferSelect;
 export type LossReason = typeof lossReasons.$inferSelect;
+export type Product = typeof products.$inferSelect;
 export type WhatsappTemplate = typeof whatsappTemplates.$inferSelect;
 export type Campaign = typeof campaigns.$inferSelect;
 export type CampaignRecipient = typeof campaignRecipients.$inferSelect;

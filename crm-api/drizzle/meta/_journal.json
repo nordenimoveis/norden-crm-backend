@@ -50,6 +50,13 @@
       "when": 1791299758113,
       "tag": "0006_youthful_talon",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791300348160,
+      "tag": "0007_lethal_jack_power",
+      "breakpoints": true
     }
   ]
 }

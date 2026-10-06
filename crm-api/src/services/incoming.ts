@@ -11,6 +11,7 @@ import {
   readReferral,
 } from '../lib/ctwa.js';
 import { normalizePhone } from '../lib/phone.js';
+import { knownProductNames } from './products.js';
 import { scheduleAiAnalysis } from './ai.js';
 import { cancelPendingSteps } from './cadence.js';
 import { cancelPendingTasks } from './tasks.js';
@@ -22,12 +23,22 @@ import { logEvent } from './timeline.js';
 
 export const TAG_ATENDIMENTO_HUMANO = 'Atendimento Humano';
 
-/** Lista de empreendimentos conhecidos (config), para detectar o produto no texto/anúncio. */
-function knownProducts(): string[] {
-  return env()
+/**
+ * Empreendimentos conhecidos para detectar o produto no texto/anúncio: o catálogo
+ * de produtos (nome + apelidos) somado à lista de CTWA_PRODUCTS do .env (fallback).
+ */
+async function knownProducts(): Promise<string[]> {
+  const fromEnv = env()
     .CTWA_PRODUCTS.split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+  let fromCatalog: string[] = [];
+  try {
+    fromCatalog = await knownProductNames();
+  } catch {
+    // catálogo indisponível: segue só com o env
+  }
+  return Array.from(new Set([...fromCatalog, ...fromEnv]));
 }
 
 /** Subconjunto do payload de webhook do Chatwoot que usamos. */
@@ -171,7 +182,7 @@ async function detectOrigin(
   current: Lead,
   log: Logger,
 ): Promise<{ patch: Partial<Lead>; detail: Record<string, unknown> } | null> {
-  const products = knownProducts();
+  const products = await knownProducts();
 
   // Referral do anúncio: 1º do payload; se não vier, busca a conversa no Chatwoot.
   let referral: CtwaReferral | null = readReferral(p.content_attributes) ?? readReferral(p.conversation?.additional_attributes);
