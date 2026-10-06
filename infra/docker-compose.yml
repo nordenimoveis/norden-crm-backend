@@ -178,6 +178,9 @@ services:
       TEMPLATE_STEP_4: ${TEMPLATE_STEP_4:-norden_apoio}
       TEMPLATE_STEP_5: ${TEMPLATE_STEP_5:-norden_despedida}
       TEMPLATE_RETOMADA: ${TEMPLATE_RETOMADA:-norden_retomada}
+      TEMPLATE_RETOMADA_MATERIAL: ${TEMPLATE_RETOMADA_MATERIAL:-norden_retomada_material}
+      TEMPLATE_RETOMADA_NOVIDADE: ${TEMPLATE_RETOMADA_NOVIDADE:-norden_retomada_novidade}
+      TEMPLATE_RETOMADA_DESPEDIDA: ${TEMPLATE_RETOMADA_DESPEDIDA:-norden_retomada_despedida}
       WELCOME_WITH_PRODUCT: ${WELCOME_WITH_PRODUCT:-false}
       TEMPLATE_PRODUCT_FALLBACK: ${TEMPLATE_PRODUCT_FALLBACK:-os empreendimentos em Jurerê}
     depends_on:

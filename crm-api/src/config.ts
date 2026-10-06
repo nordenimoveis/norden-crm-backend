@@ -42,8 +42,11 @@ const EnvSchema = z.object({
   TEMPLATE_STEP_3: z.string().default('norden_off_market'),
   TEMPLATE_STEP_4: z.string().default('norden_apoio'),
   TEMPLATE_STEP_5: z.string().default('norden_despedida'),
-  /** Template de retomada de contato (fora das 24h), com {{3}} = assunto digitado pelo corretor. */
+  /** Templates de retomada de contato (fora das 24h), com {{3}} = assunto digitado pelo corretor. */
   TEMPLATE_RETOMADA: z.string().default('norden_retomada'),
+  TEMPLATE_RETOMADA_MATERIAL: z.string().default('norden_retomada_material'),
+  TEMPLATE_RETOMADA_NOVIDADE: z.string().default('norden_retomada_novidade'),
+  TEMPLATE_RETOMADA_DESPEDIDA: z.string().default('norden_retomada_despedida'),
   TEMPLATE_LANGUAGE: z.string().default('pt_BR'),
   TEMPLATE_CATEGORY: z.string().default('MARKETING'),
   /** Quando false, a cadência só registra o que enviaria (útil para testes antes da aprovação dos templates). */

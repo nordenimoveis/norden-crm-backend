@@ -97,6 +97,34 @@ TEMPLATE_PRODUCT_FALLBACK=os empreendimentos em Jurerê
 ```
 `TEMPLATE_PRODUCT_FALLBACK` é o texto usado quando o lead não tem empreendimento identificado (ex.: WhatsApp direto). Os passos 2–5 continuam com 2 variáveis. Dica: nomeie os formulários do Meta pelo empreendimento para o `{{3}}` sair limpo.
 
+## Retomada de contato (fora das 24h)
+
+Quatro templates **extras** (não fazem parte da régua automática) para o corretor **reabrir uma conversa** depois que a janela de 24h fechou — direto do chat, pelo botão **"Retomar contato"**. O corretor escolhe o **tom** e digita o **assunto** (`{{3}}`), que entra na mensagem. Todas as variações: `{{1}}` cliente, `{{2}}` corretor, `{{3}}` assunto. Categoria na Meta: **MARKETING**, idioma **pt_BR**.
+
+Amostras para a Meta (as 4): `Diana` · `Ana` · `o book do Origem Jurerê`.
+
+### `norden_retomada` — retomada leve
+```
+Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Fiquei pensando na nossa conversa sobre {{3}} e queria saber como você está — a ideia seguiu de pé ou surgiu alguma dúvida que eu possa esclarecer com você?
+```
+
+### `norden_retomada_material` — você já enviou book/tabela
+```
+Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Sei que a rotina corre, então passo com calma: o material que te enviei sobre {{3}} fez sentido para o que você procura, ou tem algo que eu possa ajustar para ficar mais a sua cara?
+```
+
+### `norden_retomada_novidade` — tem algo novo para mostrar
+```
+Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Lembrei de você: surgiu uma novidade sobre {{3}} que tem tudo a ver com o que você me contou. Posso te mostrar para a gente ver juntos se encaixa?
+```
+
+### `norden_retomada_despedida` — último toque, respeitoso
+```
+Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Respeito total o seu tempo e não quero insistir — só queria saber se {{3}} ainda está nos seus planos ou se prefere retomar mais para frente. Como fica melhor para você?
+```
+
+Os nomes são configuráveis no `.env` (`TEMPLATE_RETOMADA`, `TEMPLATE_RETOMADA_MATERIAL`, `TEMPLATE_RETOMADA_NOVIDADE`, `TEMPLATE_RETOMADA_DESPEDIDA`). O texto que aparece no painel/histórico vem de `crm-api/src/services/reengage.ts` — mantenha igual ao aprovado na Meta.
+
 ## Se alterar algum texto
 
 O texto que aparece no histórico do CRM fica em `crm-api/src/services/cadence.ts` (`TEMPLATE_PREVIEWS`). Mantenha os dois iguais para o corretor ver exatamente o que o cliente recebeu.

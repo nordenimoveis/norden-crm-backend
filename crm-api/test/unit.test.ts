@@ -8,6 +8,7 @@ import { mapImobziPayload } from '../src/lib/imobzi.js';
 import { cleanFormName } from '../src/lib/meta-leads.js';
 import { mapBodyVariables } from '../src/lib/meta-templates.js';
 import { contactName, contactPhone, contactEmail, isOwner } from '../src/lib/imobzi-api.js';
+import { REENGAGE_VARIANTS, reengagePreview } from '../src/services/reengage.js';
 
 const W = { timezone: 'America/Sao_Paulo', startHour: 9, endHour: 19 };
 const at = (iso: string) => DateTime.fromISO(iso, { zone: W.timezone }).toJSDate();
@@ -93,4 +94,20 @@ test('mapeamento tolerante do Imobzi', () => {
   assert.equal(m.phone, '48 98888-7777');
   assert.equal(m.email, 'j@x.com');
   assert.equal(m.interest, 'AP123');
+});
+
+test('variações de retomada: preview conectado ao cliente e ao assunto', () => {
+  const ctx = { lead_first_name: 'Diana', broker_first_name: 'Ana' };
+  // Todas as variações cumprem o contrato: personalizam, citam o assunto e fecham com pergunta.
+  for (const v of REENGAGE_VARIANTS) {
+    const p = reengagePreview(v, ctx, 'o book do Origem Jurerê');
+    assert.match(p, /Diana/);
+    assert.match(p, /Ana/);
+    assert.match(p, /o book do Origem Jurerê/);
+    assert.match(p.trim(), /\?$/); // sempre termina com pergunta
+    assert.doesNotMatch(p, /\{\{/); // nenhuma variável sobrou
+  }
+  // Fallback de nome quando o lead não tem primeiro nome.
+  const semNome = reengagePreview('leve', { broker_first_name: 'Ana' }, 'a tabela');
+  assert.match(semNome, /Oi tudo bem, tudo bem\?/);
 });
