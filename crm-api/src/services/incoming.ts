@@ -85,6 +85,8 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
         stage,
         chatwootConversationId: conversationId,
         ...(respondingCampaignId ? { lastCampaignId: respondingCampaignId } : {}),
+        // Lead da Base Antiga que responde entra na triagem como "Novo" (1ª vez).
+        ...(target.source === 'BASE_ANTIGA' && !target.inboxStatus ? { inboxStatus: 'NOVO' as const } : {}),
         ...(origin?.patch ?? {}),
         updatedAt: now,
       })

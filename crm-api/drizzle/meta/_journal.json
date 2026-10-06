@@ -57,6 +57,13 @@
       "when": 1791300348160,
       "tag": "0007_lethal_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791308000724,
+      "tag": "0008_sharp_maggott",
+      "breakpoints": true
     }
   ]
 }

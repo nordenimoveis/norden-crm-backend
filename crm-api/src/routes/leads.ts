@@ -2,7 +2,7 @@ import { and, count, desc, eq, ilike, isNotNull, ne, or, sql, type SQL } from 'd
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/client.js';
-import { cadenceSteps, campaigns, leadEvents, leadSource, leads, leadTemperature, users, type Lead } from '../db/schema.js';
+import { cadenceSteps, campaigns, inboxStatus as inboxStatusEnum, leadEvents, leadSource, leads, leadTemperature, users, type Lead } from '../db/schema.js';
 import { bus } from '../lib/events.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { assertLeadAccess, isManager, leadScope } from '../services/access.js';
@@ -11,7 +11,7 @@ import { cancelPendingTasks } from '../services/tasks.js';
 import { chatwoot } from '../services/chatwoot.js';
 import { ingestLead } from '../services/leads.js';
 import { assertActiveLossReason } from '../services/loss-reasons.js';
-import { STAGE_ROLE, assertStageKey } from '../services/pipeline.js';
+import { STAGE_ROLE, assertStageKey, stageKeyByRole } from '../services/pipeline.js';
 import { pickNextBroker } from '../services/roleta.js';
 import { logEvent } from '../services/timeline.js';
 
@@ -34,6 +34,8 @@ const ListQuery = z.object({
   respondingCampaignId: z.string().uuid().optional(),
   /** 'none' = respostas diretas (sem campanha associada). */
   respondingCampaign: z.enum(['none']).optional(),
+  /** Estado de triagem na caixa "Responderam". */
+  inboxStatus: z.enum(inboxStatusEnum.enumValues).optional(),
   q: z.string().trim().min(2).optional(),
   includeOld: z.coerce.boolean().default(false),
   limit: z.coerce.number().int().min(1).max(500).default(300),
@@ -93,6 +95,8 @@ function view(l: Lead & { brokerName?: string | null; lastCampaignName?: string 
     campaign: l.campaign,
     lastCampaignId: l.lastCampaignId,
     lastCampaignName: l.lastCampaignName ?? null,
+    inFunnel: l.inFunnel,
+    inboxStatus: l.inboxStatus,
     interest: l.interest,
     notes: l.notes,
     hasConversation: Boolean(l.chatwootConversationId),
@@ -130,8 +134,12 @@ export default async function leadRoutes(app: FastifyInstance) {
     if (q.responded) conds.push(isNotNull(leads.lastInboundAt));
     if (q.respondingCampaignId) conds.push(eq(leads.lastCampaignId, q.respondingCampaignId));
     if (q.respondingCampaign === 'none') conds.push(sql`${leads.lastCampaignId} is null`);
+    // 'NOVO' inclui quem respondeu antes do recurso (inbox_status null).
+    if (q.inboxStatus === 'NOVO') conds.push(sql`(${leads.inboxStatus} = 'NOVO' or ${leads.inboxStatus} is null)`);
+    else if (q.inboxStatus) conds.push(eq(leads.inboxStatus, q.inboxStatus));
     if (q.brokerId && isManager(req.user)) conds.push(eq(leads.brokerId, q.brokerId));
-    if (!q.includeOld && q.source !== 'BASE_ANTIGA') conds.push(ne(leads.source, 'BASE_ANTIGA'));
+    // Kanban mostra só o funil ativo; "Base Antiga" (includeOld) ou filtro por origem liberam o resto.
+    if (!q.includeOld && !q.source) conds.push(eq(leads.inFunnel, true));
     if (q.q) conds.push(or(ilike(leads.name, `%${q.q}%`), ilike(leads.phone, `%${q.q.replace(/\D/g, '') || q.q}%`), ilike(leads.email, `%${q.q}%`)));
 
     const rows = await db
@@ -189,12 +197,45 @@ export default async function leadRoutes(app: FastifyInstance) {
     const conds = [
       eq(leads.source, 'BASE_ANTIGA'),
       isNotNull(leads.lastInboundAt),
+      // só os ainda não triados ("Novos"); null = respondeu antes do recurso
+      sql`(${leads.inboxStatus} = 'NOVO' or ${leads.inboxStatus} is null)`,
       // não lido = respondeu depois da última leitura (ou nunca foi lido)
       sql`(${leads.lastReadAt} is null or ${leads.lastInboundAt} > ${leads.lastReadAt})`,
     ];
     if (scope) conds.push(scope);
     const [{ total }] = await db.select({ total: count() }).from(leads).where(and(...conds));
     return { count: Number(total) };
+  });
+
+  /**
+   * Resumo por estado de triagem (Novos/Acompanhando/Sem interesse/Qualificados)
+   * dentro do filtro de campanha atual. Alimenta o segmento de status da caixa.
+   */
+  app.get('/leads/inbox-status-summary', async (req) => {
+    const q = z
+      .object({ respondingCampaignId: z.string().uuid().optional(), respondingCampaign: z.enum(['none']).optional() })
+      .parse(req.query);
+    const scope = leadScope(req.user);
+    const conds = [eq(leads.source, 'BASE_ANTIGA'), isNotNull(leads.lastInboundAt)];
+    if (scope) conds.push(scope);
+    if (q.respondingCampaignId) conds.push(eq(leads.lastCampaignId, q.respondingCampaignId));
+    if (q.respondingCampaign === 'none') conds.push(sql`${leads.lastCampaignId} is null`);
+    const c = (expr: ReturnType<typeof sql>) => sql<number>`count(*) filter (where ${expr})`;
+    const [row] = await db
+      .select({
+        novos: c(sql`${leads.inboxStatus} = 'NOVO' or ${leads.inboxStatus} is null`),
+        acompanhando: c(sql`${leads.inboxStatus} = 'ACOMPANHANDO'`),
+        semInteresse: c(sql`${leads.inboxStatus} = 'SEM_INTERESSE'`),
+        qualificados: c(sql`${leads.inboxStatus} = 'QUALIFICADO'`),
+      })
+      .from(leads)
+      .where(and(...conds));
+    return {
+      NOVO: Number(row?.novos ?? 0),
+      ACOMPANHANDO: Number(row?.acompanhando ?? 0),
+      SEM_INTERESSE: Number(row?.semInteresse ?? 0),
+      QUALIFICADO: Number(row?.qualificados ?? 0),
+    };
   });
 
   /**
@@ -248,18 +289,56 @@ export default async function leadRoutes(app: FastifyInstance) {
         const broker = await pickNextBroker(tx);
         brokerId = broker?.id ?? null;
       }
-      // Fora da Base Antiga (deixa de ficar escondido no funil); mantém etiqueta/origem.
+      // Entra no funil ativo SEM perder a origem real (fica como QUALIFICADO na caixa).
       const [row] = await tx
         .update(leads)
-        .set({ source: 'WHATSAPP_DIRETO', brokerId, updatedAt: now })
+        .set({ inFunnel: true, inboxStatus: 'QUALIFICADO', brokerId, updatedAt: now })
         .where(eq(leads.id, lead.id))
         .returning();
-      await logEvent(tx, lead.id, 'lead.promoted', { from: 'BASE_ANTIGA', brokerId }, req.user.id);
+      await logEvent(tx, lead.id, 'lead.promoted', { brokerId }, req.user.id);
       return row!;
     });
     const [broker] = updated.brokerId ? await db.select({ name: users.name }).from(users).where(eq(users.id, updated.brokerId)) : [];
     bus.publish({ type: 'lead.updated', leadId: updated.id, brokerId: updated.brokerId });
     return view({ ...updated, brokerName: broker?.name });
+  });
+
+  /**
+   * "Sem interesse" (triagem): descarta o lead da caixa marcando como Perdido com
+   * motivo. Sai do fluxo ativo mas permanece na base para campanhas futuras.
+   */
+  app.post<{ Params: { id: string } }>('/leads/:id/discard', async (req) => {
+    const { lossReasonId } = z.object({ lossReasonId: z.string().uuid() }).parse(req.body);
+    const lead = await loadLeadFor(req, req.params.id);
+    await assertActiveLossReason(lossReasonId);
+    const lostKey = await stageKeyByRole(STAGE_ROLE.LOST);
+    const now = new Date();
+    const updated = await db.transaction(async (tx) => {
+      await cancelPendingSteps(tx, lead.id, 'Lead sem interesse (triagem)');
+      await cancelPendingTasks(tx, lead.id, 'Lead sem interesse (triagem)');
+      const [row] = await tx
+        .update(leads)
+        .set({ inboxStatus: 'SEM_INTERESSE', stage: lostKey, lostReasonId: lossReasonId, lostAt: now, updatedAt: now })
+        .where(eq(leads.id, lead.id))
+        .returning();
+      await logEvent(tx, lead.id, 'lead.updated', { inboxStatus: 'SEM_INTERESSE', lossReasonId }, req.user.id);
+      return row!;
+    });
+    bus.publish({ type: 'lead.updated', leadId: updated.id, brokerId: updated.brokerId });
+    return view(updated);
+  });
+
+  /** "Acompanhando" (triagem): sai de "Novos" sem desfecho, fica em acompanhamento. */
+  app.post<{ Params: { id: string } }>('/leads/:id/follow', async (req) => {
+    const lead = await loadLeadFor(req, req.params.id);
+    const [row] = await db
+      .update(leads)
+      .set({ inboxStatus: 'ACOMPANHANDO', updatedAt: new Date() })
+      .where(eq(leads.id, lead.id))
+      .returning();
+    await logEvent(db, lead.id, 'lead.updated', { inboxStatus: 'ACOMPANHANDO' }, req.user.id);
+    bus.publish({ type: 'lead.updated', leadId: row!.id, brokerId: row!.brokerId });
+    return view(row!);
   });
 
   app.get<{ Params: { id: string } }>('/leads/:id', async (req) => {

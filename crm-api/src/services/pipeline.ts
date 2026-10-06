@@ -31,6 +31,13 @@ export async function getStageByKey(key: string): Promise<PipelineStage | undefi
   return s;
 }
 
+/** Chave da etapa com um papel de sistema (ex.: LOST → a etapa de Perdido). */
+export async function stageKeyByRole(role: string): Promise<string> {
+  const [s] = await db.select().from(pipelineStages).where(eq(pipelineStages.systemRole, role));
+  if (!s) throw badRequest(`Etapa de papel ${role} não encontrada`);
+  return s.key;
+}
+
 /** Garante que a etapa existe; devolve a linha (com o papel de sistema). */
 export async function assertStageKey(key: string): Promise<PipelineStage> {
   const s = await getStageByKey(key);

@@ -35,6 +35,13 @@ export const leadSource = pgEnum('lead_source', [
 
 export const leadTemperature = pgEnum('lead_temperature', ['NAO_AVALIADO', 'FRIO', 'MORNO', 'QUENTE']);
 
+/**
+ * Estado de triagem na caixa "Responderam" (leads de campanha/base que responderam):
+ * NOVO (ainda não triado), ACOMPANHANDO (em conversa, decide depois),
+ * SEM_INTERESSE (descartado → Perdido), QUALIFICADO (trazido ao funil).
+ */
+export const inboxStatus = pgEnum('inbox_status', ['NOVO', 'ACOMPANHANDO', 'SEM_INTERESSE', 'QUALIFICADO']);
+
 export const cadenceStatus = pgEnum('cadence_status', ['PENDENTE', 'PROCESSANDO', 'ENVIADO', 'CANCELADO', 'FALHOU']);
 
 /** Estado de uma tarefa do corretor (ex.: ligação sugerida pela régua). */
@@ -137,6 +144,10 @@ export const leads = pgTable(
       .default('NOVO_LEAD')
       .references(() => pipelineStages.key, { onUpdate: 'cascade' }),
     temperature: leadTemperature('temperature').notNull().default('NAO_AVALIADO'),
+    /** Lead faz parte do funil ativo (Kanban). Base antiga entra como false até ser trazida. */
+    inFunnel: boolean('in_funnel').notNull().default(false),
+    /** Estado de triagem na caixa "Responderam" (null = ainda não entrou na triagem). */
+    inboxStatus: inboxStatus('inbox_status'),
     brokerId: uuid('broker_id').references(() => users.id, { onDelete: 'set null' }),
     /** Motivo da perda (quando o lead vai para uma etapa de papel LOST). */
     lostReasonId: uuid('lost_reason_id').references(() => lossReasons.id, { onDelete: 'set null' }),
