@@ -9,6 +9,7 @@ import { cleanFormName } from '../src/lib/meta-leads.js';
 import { mapBodyVariables } from '../src/lib/meta-templates.js';
 import { contactName, contactPhone, contactEmail, isOwner } from '../src/lib/imobzi-api.js';
 import { REENGAGE_VARIANTS, reengagePreview } from '../src/services/reengage.js';
+import { interestFromReferral, parseCtwaText, readReferral } from '../src/lib/ctwa.js';
 
 const W = { timezone: 'America/Sao_Paulo', startHour: 9, endHour: 19 };
 const at = (iso: string) => DateTime.fromISO(iso, { zone: W.timezone }).toJSDate();
@@ -110,4 +111,37 @@ test('variações de retomada: preview conectado ao cliente e ao assunto', () =>
   // Fallback de nome quando o lead não tem primeiro nome.
   const semNome = reengagePreview('leve', { broker_first_name: 'Ana' }, 'a tabela');
   assert.match(semNome, /Oi tudo bem, tudo bem\?/);
+});
+
+test('CTWA: produto a partir de texto pré-preenchido com rótulo', () => {
+  const texto = 'Olá! Tenho interesse.\nEmpreendimento: Origem Jurerê\nQuando pretende comprar? Este ano';
+  const p = parseCtwaText(texto, ['Origem Jurerê', 'Montblanc']);
+  assert.equal(p.interest, 'Origem Jurerê');
+  assert.equal(p.looksLikeAd, true);
+  assert.equal(p.fields.length, 1); // só a linha "Empreendimento: ..." é um campo rotulado
+  assert.equal(p.fields[0]?.label, 'Empreendimento');
+});
+
+test('CTWA: produto conhecido citado no texto livre', () => {
+  const p = parseCtwaText('Vi o anúncio do Montblanc e quero saber o valor', ['Origem Jurerê', 'Montblanc']);
+  assert.equal(p.interest, 'Montblanc');
+});
+
+test('CTWA: mensagem comum não inventa produto', () => {
+  const p = parseCtwaText('Oi, tudo bem? Pode me ligar?', ['Origem Jurerê']);
+  assert.equal(p.interest, undefined);
+  assert.equal(p.looksLikeAd, false);
+});
+
+test('CTWA: referral do anúncio vira origem e produto', () => {
+  const ref = readReferral({ referral: { source_type: 'ad', headline: 'Origem Jurerê — unidades à venda', ctwa_clid: 'abc123' } });
+  assert.ok(ref);
+  assert.equal(interestFromReferral(ref, ['Origem Jurerê']), 'Origem Jurerê');
+  // Sem produto conhecido, cai para o título do anúncio.
+  assert.equal(interestFromReferral(ref, []), 'Origem Jurerê — unidades à venda');
+});
+
+test('CTWA: objeto sem referral não é tratado como anúncio', () => {
+  assert.equal(readReferral({ foo: 'bar' }), null);
+  assert.equal(readReferral(null), null);
 });

@@ -163,6 +163,8 @@ services:
       # Coletor de leads do Meta (puxa os leads dos formulários, sem depender do webhook)
       META_PAGE_ID: ${META_PAGE_ID:-}
       META_POLL_LOOKBACK_MIN: ${META_POLL_LOOKBACK_MIN:-20}
+      # Empreendimentos conhecidos (vírgula) p/ detectar produto no WhatsApp direto/CTWA
+      CTWA_PRODUCTS: ${CTWA_PRODUCTS:-}
       # Sincronização do catálogo de templates de campanha com a Meta (WABA)
       META_WABA_ID: ${META_WABA_ID:-}
       META_WABA_TOKEN: ${META_WABA_TOKEN:-}

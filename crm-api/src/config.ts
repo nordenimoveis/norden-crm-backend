@@ -86,6 +86,12 @@ const EnvSchema = z.object({
   META_GRAPH_VERSION: z.string().default('v21.0'),
   /** ID da Página do Facebook (para o coletor puxar os leads dos formulários). Vazio = coletor desligado. */
   META_PAGE_ID: z.string().default(''),
+  /**
+   * Empreendimentos conhecidos (separados por vírgula) para detectar o produto no
+   * texto/anúncio de leads que chegam pelo WhatsApp. Ex.: "Origem Jurerê,Montblanc".
+   * Depois que o catálogo de produtos existir, ele vira a fonte desta lista.
+   */
+  CTWA_PRODUCTS: z.string().default(''),
   /** Janela (min) de leads considerados "novos" pelo coletor — deve cobrir o intervalo do agendador. */
   META_POLL_LOOKBACK_MIN: z.coerce.number().int().positive().default(20),
 

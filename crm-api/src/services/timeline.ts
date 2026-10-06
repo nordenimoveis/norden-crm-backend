@@ -8,6 +8,7 @@ export type EventType =
   | 'lead.transferred'
   | 'lead.promoted'
   | 'lead.updated'
+  | 'lead.enriched'
   | 'cadence.scheduled'
   | 'cadence.sent'
   | 'cadence.simulated'

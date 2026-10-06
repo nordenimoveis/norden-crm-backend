@@ -1,7 +1,15 @@
 import { eq } from 'drizzle-orm';
+import { env } from '../config.js';
 import { db } from '../db/client.js';
 import { leads, type Lead } from '../db/schema.js';
 import { bus } from '../lib/events.js';
+import {
+  type CtwaReferral,
+  hasAdReferral,
+  interestFromReferral,
+  parseCtwaText,
+  readReferral,
+} from '../lib/ctwa.js';
 import { normalizePhone } from '../lib/phone.js';
 import { scheduleAiAnalysis } from './ai.js';
 import { cancelPendingSteps } from './cadence.js';
@@ -14,6 +22,14 @@ import { logEvent } from './timeline.js';
 
 export const TAG_ATENDIMENTO_HUMANO = 'Atendimento Humano';
 
+/** Lista de empreendimentos conhecidos (config), para detectar o produto no texto/anúncio. */
+function knownProducts(): string[] {
+  return env()
+    .CTWA_PRODUCTS.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 /** Subconjunto do payload de webhook do Chatwoot que usamos. */
 export interface ChatwootWebhook {
   event: string;
@@ -21,12 +37,16 @@ export interface ChatwootWebhook {
   content?: string | null;
   message_type?: string | number;
   private?: boolean;
+  /** Atributos da mensagem (o referral do anúncio CTWA pode vir aqui). */
+  content_attributes?: Record<string, unknown>;
   sender?: { id?: number; name?: string; phone_number?: string | null; type?: string };
   conversation?: {
     id: number;
     inbox_id?: number;
     meta?: { sender?: { id?: number; name?: string; phone_number?: string | null } };
     contact_inbox?: { contact_id?: number; source_id?: string };
+    /** Atributos da conversa (o Chatwoot pode guardar o referral do anúncio aqui). */
+    additional_attributes?: Record<string, unknown>;
   };
   inbox?: { id: number };
 }
@@ -51,6 +71,12 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
   const target = lead ?? (await createLeadFromInbound(p, log));
   if (!target) return { handled: 'sem-telefone' };
 
+  // Enriquecimento de origem/produto: só quando falta dado (lead sem produto ou
+  // ainda marcado como WhatsApp direto), para não sobrescrever o que já é bom.
+  const origin = (target.source === 'WHATSAPP_DIRETO' || !target.interest?.trim())
+    ? await detectOrigin(p, conversationId, target, log)
+    : null;
+
   const now = new Date();
   const updated = await db.transaction(async (tx) => {
     await cancelPendingSteps(tx, target.id, 'Cliente respondeu');
@@ -59,10 +85,11 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
     const stage = target.stage === 'NOVO_LEAD' || target.stage === 'LEAD_FRIO' ? 'AGUARDANDO_RESPOSTA' : target.stage;
     const [row] = await tx
       .update(leads)
-      .set({ lastInboundAt: now, tags, stage, chatwootConversationId: conversationId, updatedAt: now })
+      .set({ lastInboundAt: now, tags, stage, chatwootConversationId: conversationId, ...(origin?.patch ?? {}), updatedAt: now })
       .where(eq(leads.id, target.id))
       .returning();
     await logEvent(tx, target.id, 'message.inbound', { messageId: p.id, preview: (p.content ?? '').slice(0, 200) });
+    if (origin?.patch) await logEvent(tx, target.id, 'lead.enriched', origin.detail);
     return row!;
   });
 
@@ -96,6 +123,53 @@ function extractPhone(p: ChatwootWebhook): string | null {
       p.conversation?.contact_inbox?.source_id ??
       null,
   );
+}
+
+/**
+ * Detecta a origem/produto de uma mensagem de entrada. Procura o referral do
+ * anúncio (na mensagem, na conversa, ou buscando a conversa no Chatwoot) e lê o
+ * texto pré-preenchido. Devolve o patch a aplicar e um detalhe para a timeline.
+ */
+async function detectOrigin(
+  p: ChatwootWebhook,
+  conversationId: number,
+  current: Lead,
+  log: Logger,
+): Promise<{ patch: Partial<Lead>; detail: Record<string, unknown> } | null> {
+  const products = knownProducts();
+
+  // Referral do anúncio: 1º do payload; se não vier, busca a conversa no Chatwoot.
+  let referral: CtwaReferral | null = readReferral(p.content_attributes) ?? readReferral(p.conversation?.additional_attributes);
+  if (!referral) {
+    try {
+      const conv = await chatwoot().getConversation(conversationId);
+      referral = readReferral(conv.additional_attributes) ?? readReferral(conv.custom_attributes);
+    } catch (err) {
+      log.warn(`Não foi possível ler atributos da conversa ${conversationId}: ${String(err)}`);
+    }
+  }
+
+  const parsed = parseCtwaText(p.content, products);
+  const interest = interestFromReferral(referral, products) ?? parsed.interest;
+
+  const patch: Partial<Lead> = {};
+  if (interest && !current.interest?.trim()) patch.interest = interest;
+  if (hasAdReferral(referral) && current.source === 'WHATSAPP_DIRETO') {
+    patch.source = 'META_ADS';
+    if (!current.campaign?.trim()) patch.campaign = (referral.headline ?? 'Meta Ads').slice(0, 140);
+  }
+  if (Object.keys(patch).length === 0) return null;
+
+  return {
+    patch,
+    detail: {
+      interest: patch.interest,
+      source: patch.source,
+      campaign: patch.campaign,
+      via: hasAdReferral(referral) ? 'referral' : 'texto',
+      fields: parsed.fields.slice(0, 10),
+    },
+  };
 }
 
 /** Alguém chamou o número da Norden sem ter passado por campanha ou site: vira lead e entra na roleta. */

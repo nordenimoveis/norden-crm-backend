@@ -51,7 +51,7 @@ async function forwardToAi(leadId: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       leadId: lead.id,
-      lead: { name: lead.name, interest: lead.interest, source: lead.source, stage: lead.stage, temperature: lead.temperature },
+      lead: { name: lead.name, interest: lead.interest, campaign: lead.campaign, source: lead.source, stage: lead.stage, temperature: lead.temperature },
       broker: { name: broker?.name ?? 'Equipe Norden' },
       messages,
     }),

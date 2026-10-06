@@ -136,6 +136,17 @@ export class ChatwootClient {
     await this.request('POST', `/conversations/${conversationId}/labels`, { labels: kept });
   }
 
+  /**
+   * Detalhes da conversa. Usado para ler `additional_attributes` (onde o Chatwoot
+   * guarda o referral do anúncio Click-to-WhatsApp, quando disponível).
+   */
+  async getConversation(conversationId: number): Promise<{
+    additional_attributes?: Record<string, unknown>;
+    custom_attributes?: Record<string, unknown>;
+  }> {
+    return this.request('GET', `/conversations/${conversationId}`);
+  }
+
   /* ---------------- Mensagens ---------------- */
 
   async listMessages(conversationId: number, opts: { before?: number; token?: string } = {}): Promise<ChatwootMessage[]> {
