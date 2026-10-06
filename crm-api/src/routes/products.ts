@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import * as products from '../services/products.js';
+import { rescanProducts } from '../services/product-detect.js';
 import type { Product } from '../db/schema.js';
 
 const view = (p: Product) => ({
@@ -36,5 +37,13 @@ export default async function productRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>('/products/:id', { preHandler: app.requireManager }, async (req, reply) => {
     await products.deleteProduct(req.params.id);
     return reply.code(204).send();
+  });
+
+  /**
+   * Reconhece o empreendimento nas conversas de leads existentes que ainda não
+   * têm produto (lê o histórico no Chatwoot e casa com o catálogo). Só gestor.
+   */
+  app.post('/products/rescan', { preHandler: app.requireManager }, async () => {
+    return rescanProducts();
   });
 }

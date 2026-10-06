@@ -145,3 +145,12 @@ test('CTWA: objeto sem referral não é tratado como anúncio', () => {
   assert.equal(readReferral({ foo: 'bar' }), null);
   assert.equal(readReferral(null), null);
 });
+
+test('CTWA: casamento por palavra inteira evita falso positivo', () => {
+  // "Terrá" (normaliza "terra") não pode casar com "terraço".
+  const p = parseCtwaText('Quero um apê com terraço grande', ['Terrá']);
+  assert.equal(p.interest, undefined);
+  // Mas casa quando o produto aparece como palavra.
+  const q = parseCtwaText('Tenho interesse no Terrá', ['Terrá']);
+  assert.equal(q.interest, 'Terrá');
+});

@@ -1,5 +1,4 @@
 import { and, desc, eq, gte, isNotNull, lte } from 'drizzle-orm';
-import { env } from '../config.js';
 import { db } from '../db/client.js';
 import { campaignRecipients, leads, type Lead } from '../db/schema.js';
 import { bus } from '../lib/events.js';
@@ -11,7 +10,7 @@ import {
   readReferral,
 } from '../lib/ctwa.js';
 import { normalizePhone } from '../lib/phone.js';
-import { knownProductNames } from './products.js';
+import { knownProducts, scanConversationForProduct } from './product-detect.js';
 import { scheduleAiAnalysis } from './ai.js';
 import { cancelPendingSteps } from './cadence.js';
 import { cancelPendingTasks } from './tasks.js';
@@ -22,24 +21,6 @@ import { notifyInbound } from './push.js';
 import { logEvent } from './timeline.js';
 
 export const TAG_ATENDIMENTO_HUMANO = 'Atendimento Humano';
-
-/**
- * Empreendimentos conhecidos para detectar o produto no texto/anúncio: o catálogo
- * de produtos (nome + apelidos) somado à lista de CTWA_PRODUCTS do .env (fallback).
- */
-async function knownProducts(): Promise<string[]> {
-  const fromEnv = env()
-    .CTWA_PRODUCTS.split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  let fromCatalog: string[] = [];
-  try {
-    fromCatalog = await knownProductNames();
-  } catch {
-    // catálogo indisponível: segue só com o env
-  }
-  return Array.from(new Set([...fromCatalog, ...fromEnv]));
-}
 
 /** Subconjunto do payload de webhook do Chatwoot que usamos. */
 export interface ChatwootWebhook {
@@ -196,7 +177,11 @@ async function detectOrigin(
   }
 
   const parsed = parseCtwaText(p.content, products);
-  const interest = interestFromReferral(referral, products) ?? parsed.interest;
+  // Produto: referral do anúncio → mensagem atual → histórico da conversa.
+  let interest = interestFromReferral(referral, products) ?? parsed.interest;
+  if (!interest && !current.interest?.trim()) {
+    interest = await scanConversationForProduct(conversationId, products);
+  }
 
   const patch: Partial<Lead> = {};
   if (interest && !current.interest?.trim()) patch.interest = interest;

@@ -44,12 +44,21 @@ export interface CtwaParsed {
 const INTEREST_LABEL = /(empreend|im[oó]vel|produto|interesse|unidade|projeto)/i;
 const LINE_FIELD = /^\s*([\p{L}][\p{L}\s/()-]{1,40}?)\s*[:：]\s*(.+?)\s*$/u;
 
-/** Acha, numa lista de produtos conhecidos, o primeiro citado no texto. */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Acha, numa lista de produtos conhecidos, o primeiro citado no texto.
+ * Casa por PALAVRA INTEIRA (evita "Terrá" bater com "terraço", "Rise" com "sunrise").
+ */
 export function matchKnownProduct(text: string, knownProducts: string[]): string | undefined {
   const hay = norm(text);
   for (const p of knownProducts) {
     const needle = norm(p);
-    if (needle && hay.includes(needle)) return p;
+    if (!needle) continue;
+    const re = new RegExp(`\\b${escapeRegex(needle)}\\b`);
+    if (re.test(hay)) return p;
   }
   return undefined;
 }
