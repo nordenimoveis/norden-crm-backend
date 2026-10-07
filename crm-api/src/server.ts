@@ -22,6 +22,7 @@ import pushRoutes from './routes/push.js';
 import quickReplyRoutes from './routes/quick-replies.js';
 import reportRoutes from './routes/reports.js';
 import taskRoutes from './routes/tasks.js';
+import activityRoutes from './routes/activities.js';
 import userRoutes from './routes/users.js';
 import webhookRoutes from './routes/webhooks.js';
 import { ChatwootError } from './services/chatwoot.js';
@@ -80,6 +81,7 @@ export async function buildServer() {
   await app.register(quickReplyRoutes);
   await app.register(reportRoutes);
   await app.register(taskRoutes);
+  await app.register(activityRoutes);
   await app.register(pushRoutes);
   await app.register(eventRoutes);
   await app.register(internalRoutes);

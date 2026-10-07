@@ -47,6 +47,9 @@ export const cadenceStatus = pgEnum('cadence_status', ['PENDENTE', 'PROCESSANDO'
 /** Estado de uma tarefa do corretor (ex.: ligação sugerida pela régua). */
 export const taskStatus = pgEnum('task_status', ['PENDENTE', 'FEITA', 'SEM_RESPOSTA', 'CANCELADA']);
 
+/** Tipos de atividade (agenda do corretor, vinculada ao negócio). Estilo Pipedrive, adaptado ao imobiliário. */
+export const activityType = pgEnum('activity_type', ['LIGACAO', 'WHATSAPP', 'REUNIAO', 'VISITA', 'TAREFA', 'PRAZO', 'EMAIL']);
+
 /** Estado de uma campanha de disparo em massa. */
 export const campaignStatus = pgEnum('campaign_status', [
   'RASCUNHO',
@@ -245,6 +248,40 @@ export const leadTasks = pgTable(
   ],
 );
 
+/**
+ * Atividades da agenda do corretor, SEMPRE vinculadas a um negócio (lead).
+ * Estilo Pipedrive: tipo (com ícone), assunto, data/hora, responsável, notas e
+ * "concluído". Diferente das lead_tasks (ligações automáticas da régua): estas
+ * são criadas manualmente pelo corretor.
+ */
+export const leadActivities = pgTable(
+  'lead_activities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    leadId: uuid('lead_id')
+      .notNull()
+      .references(() => leads.id, { onDelete: 'cascade' }),
+    type: activityType('type').notNull().default('TAREFA'),
+    subject: text('subject').notNull(),
+    notes: text('notes'),
+    /** Início agendado (null = sem data definida). */
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    /** Duração em minutos (opcional, para reunião/visita). */
+    durationMin: integer('duration_min'),
+    done: boolean('done').notNull().default(false),
+    doneAt: timestamp('done_at', { withTimezone: true }),
+    /** Corretor responsável pela atividade. */
+    brokerId: uuid('broker_id').references(() => users.id, { onDelete: 'set null' }),
+    createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('lead_activities_lead_idx').on(t.leadId),
+    index('lead_activities_broker_done_due_idx').on(t.brokerId, t.done, t.dueAt),
+  ],
+);
+
 /** Linha do tempo do lead (auditoria): quem fez o quê e quando. */
 export const leadEvents = pgTable(
   'lead_events',
@@ -372,6 +409,8 @@ export type Lead = typeof leads.$inferSelect;
 export type NewLead = typeof leads.$inferInsert;
 export type CadenceStep = typeof cadenceSteps.$inferSelect;
 export type LeadTask = typeof leadTasks.$inferSelect;
+export type LeadActivity = typeof leadActivities.$inferSelect;
+export type ActivityType = (typeof activityType.enumValues)[number];
 export type TaskStatus = (typeof taskStatus.enumValues)[number];
 export type PipelineStage = typeof pipelineStages.$inferSelect;
 export type LossReason = typeof lossReasons.$inferSelect;
