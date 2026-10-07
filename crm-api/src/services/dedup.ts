@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, ne, sql } from 'drizzle-orm';
+import { eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { cadenceSteps, campaignRecipients, leadEvents, leadTasks, leads, type Lead } from '../db/schema.js';
 import { logEvent } from './timeline.js';
@@ -43,7 +43,7 @@ function pickPrimary(group: Lead[]): Lead {
 /** Mescla todos os registros de um grupo no primário (dentro de uma transação). */
 async function mergeGroup(ids: string[]): Promise<{ primaryId: string; merged: number } | null> {
   return db.transaction(async (tx) => {
-    const group = await tx.select().from(leads).where(sql`${leads.id} = ANY(${ids})`).for('update');
+    const group = await tx.select().from(leads).where(inArray(leads.id, ids)).for('update');
     if (group.length < 2) return null;
 
     const primary = pickPrimary(group);
