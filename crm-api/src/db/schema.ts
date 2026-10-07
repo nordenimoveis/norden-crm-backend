@@ -134,8 +134,10 @@ export const leads = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     name: text('name').notNull(),
-    /** Telefone só com dígitos, com DDI (ex.: 5548999998888). */
+    /** Telefone só com dígitos, com DDI (ex.: 5548999998888). Usado no envio. */
     phone: text('phone'),
+    /** Chave canônica do telefone p/ dedup (resolve o 9º dígito). Não usar no envio. */
+    phoneKey: text('phone_key'),
     email: text('email'),
     source: leadSource('source').notNull(),
     /** Chave da etapa no funil (FK para pipeline_stages.key). */
@@ -178,6 +180,7 @@ export const leads = pgTable(
   },
   (t) => [
     uniqueIndex('leads_phone_unique').on(t.phone),
+    index('leads_phone_key_idx').on(t.phoneKey),
     uniqueIndex('leads_conversation_unique').on(t.chatwootConversationId),
     index('leads_broker_idx').on(t.brokerId),
     index('leads_stage_idx').on(t.stage),

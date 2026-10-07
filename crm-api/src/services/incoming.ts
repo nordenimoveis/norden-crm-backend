@@ -9,7 +9,7 @@ import {
   parseCtwaText,
   readReferral,
 } from '../lib/ctwa.js';
-import { normalizePhone } from '../lib/phone.js';
+import { normalizePhone, phoneKey } from '../lib/phone.js';
 import { knownProducts, scanConversationForProduct } from './product-detect.js';
 import { scheduleAiAnalysis } from './ai.js';
 import { cancelPendingSteps } from './cadence.js';
@@ -132,6 +132,12 @@ async function findLeadForConversation(p: ChatwootWebhook): Promise<Lead | null>
   if (byConv[0]) return byConv[0];
   const phone = extractPhone(p);
   if (!phone) return null;
+  // Casa pela CHAVE canônica (resolve o 9º dígito) para não duplicar o lead do Meta.
+  const pkey = phoneKey(phone);
+  if (pkey) {
+    const byKey = await db.select().from(leads).where(eq(leads.phoneKey, pkey));
+    if (byKey[0]) return byKey[0];
+  }
   const byPhone = await db.select().from(leads).where(eq(leads.phone, phone));
   return byPhone[0] ?? null;
 }

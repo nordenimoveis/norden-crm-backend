@@ -8,6 +8,7 @@ import { runDueCampaigns } from '../services/campaigns.js';
 import { importImobziContacts } from '../services/imobzi-import.js';
 import { ingestLead } from '../services/leads.js';
 import { runMetaPoll } from '../services/meta-poll.js';
+import { dedupAllByPhone } from '../services/dedup.js';
 
 const IngestBody = z.object({
   name: z.string().default(''),
@@ -44,6 +45,11 @@ export default async function internalRoutes(app: FastifyInstance) {
 
   /** Coletor de leads do Meta (puxa leads novos dos formulários, sem depender do webhook). */
   app.post('/internal/meta/poll', async () => runMetaPoll());
+
+  /** Mescla leads duplicados por telefone (resolve o 9º dígito). ?dryRun=1 só conta. */
+  app.post<{ Querystring: { dryRun?: string } }>('/internal/leads/dedup', async (req) =>
+    dedupAllByPhone(req.query.dryRun === '1' || req.query.dryRun === 'true'),
+  );
 
   /** Importa os Contatos do Imobzi como Base Antiga. dryRun só conta; max limita o lote. */
   app.post('/internal/imobzi/import', async (req) => {

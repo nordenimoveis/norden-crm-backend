@@ -3,7 +3,7 @@ import { db } from '../db/client.js';
 import { leads, users, type Lead, type LeadSource, type User } from '../db/schema.js';
 import { bus } from '../lib/events.js';
 import { badRequest } from '../lib/errors.js';
-import { normalizePhone } from '../lib/phone.js';
+import { normalizePhone, phoneKey as toPhoneKey } from '../lib/phone.js';
 import { firstStepTime, scheduleStep } from './cadence.js';
 import { pickNextBroker } from './roleta.js';
 import { logEvent } from './timeline.js';
@@ -42,12 +42,14 @@ export interface IngestResult {
 export async function ingestLead(input: IngestInput): Promise<IngestResult> {
   const name = input.name.trim() || 'Sem nome';
   const phone = normalizePhone(input.phone);
+  const pkey = toPhoneKey(phone);
   const email = input.email?.trim().toLowerCase() || null;
   if (!phone && !email) throw badRequest('Lead precisa de telefone ou e-mail');
 
   const result = await db.transaction(async (tx): Promise<IngestResult> => {
-    const existing = phone
-      ? (await tx.select().from(leads).where(eq(leads.phone, phone)).for('update'))[0]
+    // Dedup por CHAVE canônica do telefone (resolve o 9º dígito); senão, origem + ID externo.
+    const existing = pkey
+      ? (await tx.select().from(leads).where(eq(leads.phoneKey, pkey)).for('update'))[0]
       : input.externalId
         ? (await tx.select().from(leads).where(and(eq(leads.source, input.source), eq(leads.externalId, input.externalId))).for('update'))[0]
         : undefined;
@@ -55,6 +57,8 @@ export async function ingestLead(input: IngestInput): Promise<IngestResult> {
     if (existing) {
       const patch: Partial<Lead> = { updatedAt: new Date() };
       if (!existing.email && email) patch.email = email;
+      if (!existing.phoneKey && pkey) patch.phoneKey = pkey; // completa a chave em registros antigos
+      if (!existing.phone && phone) patch.phone = phone;
 
       // Re-entrada ATIVA (Meta/site/manual): um contato que já existe mas está
       // fora do funil (base antiga, perdido, frio) e volta por um anúncio/form
@@ -107,7 +111,7 @@ export async function ingestLead(input: IngestInput): Promise<IngestResult> {
     if (input.source === 'BASE_ANTIGA') {
       const [lead] = await tx
         .insert(leads)
-        .values({ name, phone, email, source: 'BASE_ANTIGA', externalId: input.externalId, campaign: input.campaign, interest: input.interest, notes: input.notes, tags: [TAG_BASE_ANTIGA] })
+        .values({ name, phone, phoneKey: pkey, email, source: 'BASE_ANTIGA', externalId: input.externalId, campaign: input.campaign, interest: input.interest, notes: input.notes, tags: [TAG_BASE_ANTIGA] })
         .returning();
       await logEvent(tx, lead!.id, 'lead.created', { source: 'BASE_ANTIGA', raw: input.raw ?? {} });
       return { lead: lead!, created: true, broker: null };
@@ -126,6 +130,7 @@ export async function ingestLead(input: IngestInput): Promise<IngestResult> {
       .values({
         name,
         phone,
+        phoneKey: pkey,
         email,
         source: input.source,
         externalId: input.externalId,

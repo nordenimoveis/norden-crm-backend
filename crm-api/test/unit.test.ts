@@ -154,3 +154,16 @@ test('CTWA: casamento por palavra inteira evita falso positivo', () => {
   const q = parseCtwaText('Tenho interesse no Terrá', ['Terrá']);
   assert.equal(q.interest, 'Terrá');
 });
+
+test('chave canônica do telefone resolve o 9º dígito', async () => {
+  const { phoneKey } = await import('../src/lib/phone.js');
+  // Mesmo número com e sem o 9 => mesma chave.
+  assert.equal(phoneKey('5548999998888'), '554899998888');
+  assert.equal(phoneKey('554899998888'), '554899998888');
+  assert.equal(phoneKey('5548999998888'), phoneKey('554899998888'));
+  // Fixo (8 dígitos, sem 9 inicial) fica intacto.
+  assert.equal(phoneKey('554833334444'), '554833334444');
+  // Estrangeiro/outros tamanhos: inalterado.
+  assert.equal(phoneKey('13055550101'), '13055550101');
+  assert.equal(phoneKey(null), null);
+});

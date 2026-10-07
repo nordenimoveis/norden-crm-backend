@@ -19,6 +19,21 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   return digits;
 }
 
+/**
+ * Chave canônica para DEDUPLICAÇÃO (não para envio). Resolve a variação do 9º
+ * dígito dos celulares brasileiros: 55 + DDD + 9XXXXXXXX e 55 + DDD + XXXXXXXX
+ * (mesmo número, com e sem o 9) passam a ter a MESMA chave. Mantém o `phone`
+ * original intacto para o envio pelo WhatsApp.
+ */
+export function phoneKey(normalized: string | null | undefined): string | null {
+  if (!normalized) return null;
+  // 55 (DDI) + 2 (DDD) + 9 (celular com o 9) => remove o 9 para casar com a forma sem ele.
+  if (normalized.length === 13 && normalized.startsWith('55') && normalized[4] === '9') {
+    return normalized.slice(0, 4) + normalized.slice(5);
+  }
+  return normalized;
+}
+
 /** Formato E.164 exigido pelo Chatwoot/WhatsApp. */
 export function toE164(phone: string): string {
   return `+${phone}`;
