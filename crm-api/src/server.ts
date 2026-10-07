@@ -7,6 +7,7 @@ import { ZodError } from 'zod';
 import { env } from './config.js';
 import { closeDb, db } from './db/client.js';
 import { HttpError } from './lib/errors.js';
+import { startMetaPollScheduler, stopMetaPollScheduler } from './services/meta-poll.js';
 import authPlugin from './plugins/auth.js';
 import authRoutes from './routes/auth.js';
 import campaignRoutes from './routes/campaigns.js';
@@ -91,6 +92,7 @@ const isMain = import.meta.url === `file://${process.argv[1]}`;
 if (isMain) {
   const app = await buildServer();
   const shutdown = async () => {
+    stopMetaPollScheduler();
     await app.close();
     await closeDb();
     process.exit(0);
@@ -98,4 +100,6 @@ if (isMain) {
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
   await app.listen({ host: '0.0.0.0', port: env().PORT });
+  // Agendador interno do coletor de leads do Meta (robusto a falhas de cron/n8n).
+  startMetaPollScheduler({ info: (m) => app.log.info(m), warn: (m) => app.log.warn(m) });
 }

@@ -162,7 +162,9 @@ services:
       META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v21.0}
       # Coletor de leads do Meta (puxa os leads dos formulários, sem depender do webhook)
       META_PAGE_ID: ${META_PAGE_ID:-}
-      META_POLL_LOOKBACK_MIN: ${META_POLL_LOOKBACK_MIN:-20}
+      META_POLL_LOOKBACK_MIN: ${META_POLL_LOOKBACK_MIN:-40}
+      # Agendador interno do coletor (min). 0 = desligado (usar cron/n8n externo).
+      META_POLL_INTERVAL_MIN: ${META_POLL_INTERVAL_MIN:-5}
       # Empreendimentos conhecidos (vírgula) p/ detectar produto no WhatsApp direto/CTWA
       CTWA_PRODUCTS: ${CTWA_PRODUCTS:-}
       # Sincronização do catálogo de templates de campanha com a Meta (WABA)

@@ -92,8 +92,10 @@ const EnvSchema = z.object({
    * Depois que o catálogo de produtos existir, ele vira a fonte desta lista.
    */
   CTWA_PRODUCTS: z.string().default(''),
-  /** Janela (min) de leads considerados "novos" pelo coletor — deve cobrir o intervalo do agendador. */
-  META_POLL_LOOKBACK_MIN: z.coerce.number().int().positive().default(20),
+  /** Janela (min) de leads considerados "novos" pelo coletor — deve cobrir o intervalo do agendador (com folga). */
+  META_POLL_LOOKBACK_MIN: z.coerce.number().int().positive().default(40),
+  /** Intervalo (min) do agendador INTERNO do coletor do Meta. 0 = desligado (usar cron/n8n externo). */
+  META_POLL_INTERVAL_MIN: z.coerce.number().int().min(0).default(5),
 
   /**
    * Importação da base de Contatos do Imobzi pela API REST (carga única/repetível).

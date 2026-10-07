@@ -43,8 +43,11 @@ export default async function internalRoutes(app: FastifyInstance) {
 
   app.post('/internal/campaigns/run', async () => runDueCampaigns());
 
-  /** Coletor de leads do Meta (puxa leads novos dos formulários, sem depender do webhook). */
-  app.post('/internal/meta/poll', async () => runMetaPoll());
+  /** Coletor de leads do Meta. ?minutes=N amplia a janela (recuperação de leads antigos). */
+  app.post<{ Querystring: { minutes?: string } }>('/internal/meta/poll', async (req) => {
+    const minutes = req.query.minutes ? Number(req.query.minutes) : undefined;
+    return runMetaPoll(new Date(), fetch, Number.isFinite(minutes) ? minutes : undefined);
+  });
 
   /** Mescla leads duplicados por telefone (resolve o 9º dígito). ?dryRun=1 só conta. */
   app.post<{ Querystring: { dryRun?: string } }>('/internal/leads/dedup', async (req) =>

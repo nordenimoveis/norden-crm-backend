@@ -20,12 +20,13 @@ export interface MetaPollResult {
  *   reprocessar a base antiga). A deduplicação por telefone cobre sobreposições.
  * - Empreendimento: campo do formulário ou, na falta, o nome do formulário.
  */
-export async function runMetaPoll(now = new Date(), fetchImpl: typeof fetch = fetch): Promise<MetaPollResult> {
+export async function runMetaPoll(now = new Date(), fetchImpl: typeof fetch = fetch, lookbackMin?: number): Promise<MetaPollResult> {
   const e = env();
   const result: MetaPollResult = { forms: 0, scanned: 0, created: 0, duplicate: 0, errors: 0 };
   if (!e.META_PAGE_ID || !e.META_GRAPH_TOKEN) return result; // recurso desligado
 
-  const cutoff = now.getTime() - e.META_POLL_LOOKBACK_MIN * 60_000;
+  const lookback = lookbackMin && lookbackMin > 0 ? lookbackMin : e.META_POLL_LOOKBACK_MIN;
+  const cutoff = now.getTime() - lookback * 60_000;
   const forms = await listLeadForms(fetchImpl);
 
   for (const form of forms) {
@@ -67,4 +68,45 @@ export async function runMetaPoll(now = new Date(), fetchImpl: typeof fetch = fe
   }
 
   return result;
+}
+
+let running = false;
+let timer: NodeJS.Timeout | undefined;
+
+/**
+ * Agendador INTERNO do coletor: roda runMetaPoll periodicamente dentro do próprio
+ * processo da API. Mais robusto que cron/n8n externo (sobe junto com o contêiner,
+ * não depende de PATH nem de workflow configurado). Evita execuções sobrepostas.
+ */
+export function startMetaPollScheduler(log: { info: (m: string) => void; warn: (m: string) => void }): void {
+  const e = env();
+  if (!e.META_PAGE_ID || !e.META_GRAPH_TOKEN || e.META_POLL_INTERVAL_MIN <= 0) {
+    log.info('Coletor do Meta: agendador interno desligado (sem META_PAGE_ID/token ou intervalo 0).');
+    return;
+  }
+
+  const tick = async () => {
+    if (running) return; // não sobrepõe execuções
+    running = true;
+    try {
+      const r = await runMetaPoll();
+      if (r.created > 0 || r.errors > 0) log.info(`Coletor do Meta: ${JSON.stringify(r)}`);
+    } catch (err) {
+      log.warn(`Coletor do Meta falhou: ${String(err)}`);
+    } finally {
+      running = false;
+    }
+  };
+
+  const intervalMs = e.META_POLL_INTERVAL_MIN * 60_000;
+  timer = setInterval(tick, intervalMs);
+  timer.unref?.(); // não segura o processo no shutdown
+  setTimeout(tick, 30_000); // primeira passada ~30s após subir
+  log.info(`Coletor do Meta: agendador interno a cada ${e.META_POLL_INTERVAL_MIN} min (janela ${e.META_POLL_LOOKBACK_MIN} min).`);
+}
+
+/** Para o agendador (usado no shutdown/testes). */
+export function stopMetaPollScheduler(): void {
+  if (timer) clearInterval(timer);
+  timer = undefined;
 }
