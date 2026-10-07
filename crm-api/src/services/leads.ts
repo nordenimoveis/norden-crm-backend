@@ -55,19 +55,53 @@ export async function ingestLead(input: IngestInput): Promise<IngestResult> {
     if (existing) {
       const patch: Partial<Lead> = { updatedAt: new Date() };
       if (!existing.email && email) patch.email = email;
-      if (!existing.interest && input.interest) patch.interest = input.interest;
-      // Preenche a origem/campanha quando ainda não houver (ex.: backfill da Base Antiga pelo media_source do Imobzi)
-      if (!existing.campaign && input.campaign) patch.campaign = input.campaign;
-      // Lead frio que volta a demonstrar interesse retorna para "Novo Lead" (sem reiniciar a cadência)
-      if (existing.stage === 'LEAD_FRIO' && input.source !== 'BASE_ANTIGA') patch.stage = 'NOVO_LEAD';
+
+      // Re-entrada ATIVA (Meta/site/manual): um contato que já existe mas está
+      // fora do funil (base antiga, perdido, frio) e volta por um anúncio/form
+      // vira OPORTUNIDADE NOVA — entra no funil, com corretor e cadência.
+      const active = input.source !== 'BASE_ANTIGA';
+      const promote = active && !existing.inFunnel;
+      let broker: User | null = null;
+
+      if (promote) {
+        patch.inFunnel = true;
+        patch.source = input.source;
+        patch.stage = 'NOVO_LEAD';
+        patch.inboxStatus = null; // deixa de ser item de triagem da caixa
+        if (input.interest) patch.interest = input.interest; // produto do form atual
+        if (input.campaign) patch.campaign = input.campaign;
+        if (existing.lostAt) {
+          patch.lostAt = null; // reabre se estava perdido
+          patch.lostReasonId = null;
+        }
+        if (!existing.brokerId) {
+          broker = await pickNextBroker(tx);
+          patch.brokerId = broker?.id ?? null;
+        }
+      } else {
+        // Já está no funil (ou é import de base): só completa o que falta.
+        if (!existing.interest && input.interest) patch.interest = input.interest;
+        if (!existing.campaign && input.campaign) patch.campaign = input.campaign;
+        if (existing.stage === 'LEAD_FRIO' && active) patch.stage = 'NOVO_LEAD';
+      }
+
       const [updated] = await tx.update(leads).set(patch).where(eq(leads.id, existing.id)).returning();
       await logEvent(tx, existing.id, 'lead.reentry', {
         source: input.source,
         campaign: input.campaign,
         interest: input.interest,
+        promoted: promote,
         raw: input.raw ?? {},
       });
-      return { lead: updated!, created: false, broker: null };
+      if (promote) {
+        await logEvent(tx, existing.id, 'lead.assigned', {
+          brokerId: patch.brokerId ?? existing.brokerId ?? null,
+          brokerName: broker?.name ?? null,
+          via: 'roleta',
+        });
+        if (phone && !input.skipCadence) await scheduleStep(tx, existing.id, 1, firstStepTime(new Date()));
+      }
+      return { lead: updated!, created: false, broker };
     }
 
     if (input.source === 'BASE_ANTIGA') {
@@ -99,6 +133,7 @@ export async function ingestLead(input: IngestInput): Promise<IngestResult> {
         interest: input.interest,
         notes: input.notes,
         brokerId: broker?.id ?? null,
+        inFunnel: true, // origem ativa (Meta/site/WhatsApp/manual) entra no funil
       })
       .returning();
 

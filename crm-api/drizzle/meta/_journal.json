@@ -71,6 +71,13 @@
       "when": 1791308945244,
       "tag": "0009_fix_inbox_status",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791384361303,
+      "tag": "0010_fix_active_in_funnel",
+      "breakpoints": true
     }
   ]
 }
