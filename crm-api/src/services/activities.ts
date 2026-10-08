@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, gte, isNotNull, lt, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, ne, sql, type SQL } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { leadActivities, leads, users, type ActivityType, type LeadActivity } from '../db/schema.js';
+import { leadActivities, leads, leadTasks, users, type ActivityType, type LeadActivity } from '../db/schema.js';
 import { HttpError, notFound } from '../lib/errors.js';
 import { assertLeadAccess, leadScope, type AuthUser } from './access.js';
 import { logEvent } from './timeline.js';
@@ -64,72 +64,150 @@ export async function listForLead(user: AuthUser, leadId: string): Promise<Activ
 }
 
 export type AgendaFilter = 'todas' | 'para_fazer' | 'vencido' | 'hoje' | 'concluido';
+export type AgendaSource = 'manual' | 'regua';
 
-/** Agenda global do corretor (tela Atividades), com filtros estilo Pipedrive. */
-export async function listAgenda(
-  user: AuthUser,
-  opts: { filter?: AgendaFilter; type?: ActivityType; brokerId?: string | null },
-  now = new Date(),
-): Promise<ActivityView[]> {
-  const conds: (SQL | undefined)[] = [];
-  const scope = leadScope(user);
-  if (scope) conds.push(scope);
-  if (opts.type) conds.push(eq(leadActivities.type, opts.type));
-  if (opts.brokerId) conds.push(eq(leadActivities.brokerId, opts.brokerId));
-
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(startOfDay);
-  endOfDay.setDate(endOfDay.getDate() + 1);
-
-  switch (opts.filter) {
-    case 'concluido':
-      conds.push(eq(leadActivities.done, true));
-      break;
-    case 'vencido':
-      conds.push(eq(leadActivities.done, false), isNotNull(leadActivities.dueAt), lt(leadActivities.dueAt, now));
-      break;
-    case 'hoje':
-      conds.push(eq(leadActivities.done, false), isNotNull(leadActivities.dueAt), gte(leadActivities.dueAt, startOfDay), lt(leadActivities.dueAt, endOfDay));
-      break;
-    case 'para_fazer':
-      conds.push(eq(leadActivities.done, false));
-      break;
-    default:
-      break; // 'todas'
-  }
-
-  const rows = await db
-    .select({ a: leadActivities, leadName: leads.name, brokerName: users.name })
-    .from(leadActivities)
-    .innerJoin(leads, eq(leads.id, leadActivities.leadId))
-    .leftJoin(users, eq(users.id, leadActivities.brokerId))
-    .where(and(...conds))
-    .orderBy(asc(leadActivities.done), asc(leadActivities.dueAt), desc(leadActivities.createdAt))
-    .limit(500);
-  return rows.map((r) => view(r.a, { leadName: r.leadName, brokerName: r.brokerName }));
+/** Item unificado da agenda: atividade manual OU ligação da régua (tarefa). */
+export interface AgendaItem {
+  source: 'activity' | 'task';
+  id: string;
+  leadId: string;
+  leadName: string;
+  type: ActivityType;
+  subject: string;
+  dueAt: string | null;
+  done: boolean;
+  doneAt: string | null;
+  /** Para tarefas da régua concluídas: 'FEITA' | 'SEM_RESPOSTA'. */
+  outcome: string | null;
+  /** Veio da régua (automática) — não editável. */
+  automatic: boolean;
+  brokerName: string | null;
 }
 
-/** Contagem por filtro para as abas da tela Atividades. */
-export async function agendaCounts(user: AuthUser, now = new Date()): Promise<{ para_fazer: number; vencido: number; hoje: number }> {
+const ts = (d: Date | null | undefined) => (d ? d.getTime() : 0);
+
+/**
+ * Agenda global do corretor (tela Atividades), UNIFICADA: atividades manuais +
+ * ligações da régua (lead_tasks). Mantém as duas fontes; só junta a visão.
+ */
+export async function listAgenda(
+  user: AuthUser,
+  opts: { filter?: AgendaFilter; type?: ActivityType; source?: AgendaSource; brokerId?: string | null },
+  now = new Date(),
+): Promise<AgendaItem[]> {
   const scope = leadScope(user);
-  const base: SQL[] = [];
-  if (scope) base.push(scope);
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(startOfDay);
   endOfDay.setDate(endOfDay.getDate() + 1);
-  const c = (expr: SQL) => sql<number>`count(*) filter (where ${expr})`;
-  const [row] = await db
-    .select({
-      para_fazer: c(sql`${leadActivities.done} = false`),
-      vencido: c(sql`${leadActivities.done} = false and ${leadActivities.dueAt} is not null and ${leadActivities.dueAt} < ${now}`),
-      hoje: c(sql`${leadActivities.done} = false and ${leadActivities.dueAt} >= ${startOfDay} and ${leadActivities.dueAt} < ${endOfDay}`),
-    })
-    .from(leadActivities)
-    .innerJoin(leads, eq(leads.id, leadActivities.leadId))
-    .where(base.length ? and(...base) : sql`true`);
-  return { para_fazer: Number(row?.para_fazer ?? 0), vencido: Number(row?.vencido ?? 0), hoje: Number(row?.hoje ?? 0) };
+
+  const items: AgendaItem[] = [];
+
+  // Atividades manuais (salvo quando o filtro é só "régua").
+  if (opts.source !== 'regua') {
+    const conds: SQL[] = [];
+    if (scope) conds.push(scope);
+    if (opts.type) conds.push(eq(leadActivities.type, opts.type));
+    if (opts.brokerId) conds.push(eq(leadActivities.brokerId, opts.brokerId));
+    const rows = await db
+      .select({ a: leadActivities, leadName: leads.name, brokerName: users.name })
+      .from(leadActivities)
+      .innerJoin(leads, eq(leads.id, leadActivities.leadId))
+      .leftJoin(users, eq(users.id, leadActivities.brokerId))
+      .where(conds.length ? and(...conds) : sql`true`)
+      .limit(500);
+    for (const r of rows) {
+      items.push({
+        source: 'activity',
+        id: r.a.id,
+        leadId: r.a.leadId,
+        leadName: r.leadName,
+        type: r.a.type,
+        subject: r.a.subject,
+        dueAt: r.a.dueAt ? r.a.dueAt.toISOString() : null,
+        done: r.a.done,
+        doneAt: r.a.doneAt ? r.a.doneAt.toISOString() : null,
+        outcome: null,
+        automatic: false,
+        brokerName: r.brokerName ?? null,
+      });
+    }
+  }
+
+  // Ligações da régua (lead_tasks) — só quando não filtra por outro tipo que não LIGACAO.
+  if (opts.source !== 'manual' && (!opts.type || opts.type === 'LIGACAO')) {
+    const conds: SQL[] = [ne(leadTasks.status, 'CANCELADA')];
+    if (scope) conds.push(scope);
+    if (opts.brokerId) conds.push(eq(leadTasks.brokerId, opts.brokerId));
+    const rows = await db
+      .select({ t: leadTasks, leadName: leads.name, brokerName: users.name })
+      .from(leadTasks)
+      .innerJoin(leads, eq(leads.id, leadTasks.leadId))
+      .leftJoin(users, eq(users.id, leadTasks.brokerId))
+      .where(and(...conds))
+      .limit(500);
+    for (const r of rows) {
+      const done = r.t.status !== 'PENDENTE';
+      items.push({
+        source: 'task',
+        id: r.t.id,
+        leadId: r.t.leadId,
+        leadName: r.leadName,
+        type: 'LIGACAO',
+        subject: r.t.title,
+        dueAt: r.t.dueAt ? r.t.dueAt.toISOString() : null,
+        done,
+        doneAt: r.t.doneAt ? r.t.doneAt.toISOString() : null,
+        outcome: done ? r.t.status : null,
+        automatic: true,
+        brokerName: r.brokerName ?? null,
+      });
+    }
+  }
+
+  // Filtro de situação aplicado ao conjunto unificado.
+  const inToday = (iso: string | null) => iso !== null && ts(new Date(iso)) >= startOfDay.getTime() && ts(new Date(iso)) < endOfDay.getTime();
+  const filtered = items.filter((it) => {
+    switch (opts.filter) {
+      case 'concluido':
+        return it.done;
+      case 'vencido':
+        return !it.done && it.dueAt !== null && ts(new Date(it.dueAt)) < now.getTime();
+      case 'hoje':
+        return !it.done && inToday(it.dueAt);
+      case 'para_fazer':
+        return !it.done;
+      default:
+        return true; // todas
+    }
+  });
+
+  filtered.sort((a, b) => {
+    const d = Number(a.done) - Number(b.done); // pendentes primeiro
+    if (d !== 0) return d;
+    return (a.dueAt ? ts(new Date(a.dueAt)) : Infinity) - (b.dueAt ? ts(new Date(b.dueAt)) : Infinity);
+  });
+  return filtered.slice(0, 500);
+}
+
+/** Contagem por filtro (unificada) para as abas da tela Atividades. */
+export async function agendaCounts(user: AuthUser, now = new Date()): Promise<{ para_fazer: number; vencido: number; hoje: number }> {
+  const all = await listAgenda(user, { filter: 'todas' }, now);
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(startOfDay);
+  endOfDay.setDate(endOfDay.getDate() + 1);
+  let para_fazer = 0, vencido = 0, hoje = 0;
+  for (const it of all) {
+    if (it.done) continue;
+    para_fazer += 1;
+    if (it.dueAt) {
+      const t = ts(new Date(it.dueAt));
+      if (t < now.getTime()) vencido += 1;
+      if (t >= startOfDay.getTime() && t < endOfDay.getTime()) hoje += 1;
+    }
+  }
+  return { para_fazer, vencido, hoje };
 }
 
 export async function createActivity(

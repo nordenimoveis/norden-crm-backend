@@ -34,6 +34,7 @@ const UpdateBody = z.object({
 const AgendaQuery = z.object({
   filter: z.enum(['todas', 'para_fazer', 'vencido', 'hoje', 'concluido']).default('para_fazer'),
   type: z.enum(activityType.enumValues).optional(),
+  source: z.enum(['manual', 'regua']).optional(),
   brokerId: z.string().uuid().optional(),
 });
 
@@ -44,7 +45,7 @@ export default async function activityRoutes(app: FastifyInstance) {
   app.get('/activities', async (req) => {
     const q = AgendaQuery.parse(req.query);
     const brokerId = isManager(req.user) ? q.brokerId : undefined;
-    return listAgenda(req.user, { filter: q.filter, type: q.type, brokerId });
+    return listAgenda(req.user, { filter: q.filter, type: q.type, source: q.source, brokerId });
   });
 
   /** Contadores das abas (para fazer / vencido / hoje). */
