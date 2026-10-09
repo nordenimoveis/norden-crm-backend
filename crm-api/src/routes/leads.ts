@@ -6,7 +6,7 @@ import { cadenceSteps, campaigns, inboxStatus as inboxStatusEnum, leadEvents, le
 import { bus } from '../lib/events.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { assertLeadAccess, isManager, leadScope } from '../services/access.js';
-import { cancelPendingSteps } from '../services/cadence.js';
+import { cancelPendingSteps, firstStepTime, scheduleStep } from '../services/cadence.js';
 import { cancelPendingTasks } from '../services/tasks.js';
 import { chatwoot } from '../services/chatwoot.js';
 import { ingestLead } from '../services/leads.js';
@@ -296,6 +296,38 @@ export default async function leadRoutes(app: FastifyInstance) {
         .where(eq(leads.id, lead.id))
         .returning();
       await logEvent(tx, lead.id, 'lead.promoted', { brokerId }, req.user.id);
+      return row!;
+    });
+    const [broker] = updated.brokerId ? await db.select({ name: users.name }).from(users).where(eq(users.id, updated.brokerId)) : [];
+    bus.publish({ type: 'lead.updated', leadId: updated.id, brokerId: updated.brokerId });
+    return view({ ...updated, brokerName: broker?.name });
+  });
+
+  /**
+   * "Criar negócio": transforma um lead (fora do funil) em oportunidade ativa.
+   * Entra na coluna "Novo Lead" mantendo o dono atual (ou roleta se não tiver).
+   * Opcionalmente inicia a régua de boas-vindas. Dono do lead ou gestor.
+   */
+  app.post<{ Params: { id: string } }>('/leads/:id/create-deal', async (req) => {
+    const { startCadence } = z.object({ startCadence: z.boolean().default(false) }).parse(req.body ?? {});
+    const lead = await loadLeadFor(req, req.params.id);
+    if (lead.inFunnel) return view(lead); // já é negócio
+
+    const entryKey = await stageKeyByRole(STAGE_ROLE.NEW);
+    const now = new Date();
+    const updated = await db.transaction(async (tx) => {
+      let brokerId = lead.brokerId;
+      if (!brokerId) {
+        const broker = await pickNextBroker(tx);
+        brokerId = broker?.id ?? null;
+      }
+      const [row] = await tx
+        .update(leads)
+        .set({ inFunnel: true, stage: entryKey, inboxStatus: null, brokerId, updatedAt: now })
+        .where(eq(leads.id, lead.id))
+        .returning();
+      await logEvent(tx, lead.id, 'lead.promoted', { brokerId, via: 'create-deal', startCadence }, req.user.id);
+      if (startCadence && row!.phone) await scheduleStep(tx, lead.id, 1, firstStepTime(now));
       return row!;
     });
     const [broker] = updated.brokerId ? await db.select({ name: users.name }).from(users).where(eq(users.id, updated.brokerId)) : [];
