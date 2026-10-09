@@ -6,6 +6,7 @@ import { applyAiResult } from '../services/ai.js';
 import { runDueSteps } from '../services/cadence.js';
 import { runDueCampaigns } from '../services/campaigns.js';
 import { importImobziContacts } from '../services/imobzi-import.js';
+import { syncImobziOwners } from '../services/imobzi-owner-sync.js';
 import { ingestLead } from '../services/leads.js';
 import { runMetaPoll } from '../services/meta-poll.js';
 import { dedupAllByPhone } from '../services/dedup.js';
@@ -58,6 +59,15 @@ export default async function internalRoutes(app: FastifyInstance) {
   app.post('/internal/imobzi/import', async (req) => {
     const b = z.object({ max: z.number().int().positive().optional(), dryRun: z.boolean().optional() }).parse(req.body ?? {});
     return importImobziContacts(b);
+  });
+
+  /**
+   * Sincroniza o corretor responsável dos negócios do Imobzi para o brokerId do lead
+   * (de-para por e-mail; só preenche onde está vazio). dryRun só relata o que faria.
+   */
+  app.post('/internal/imobzi/sync-owners', async (req) => {
+    const b = z.object({ max: z.number().int().positive().optional(), dryRun: z.boolean().optional() }).parse(req.body ?? {});
+    return syncImobziOwners(b);
   });
 
   app.post('/internal/ai/result', async (req) => {

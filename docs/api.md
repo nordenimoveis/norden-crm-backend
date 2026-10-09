@@ -123,6 +123,18 @@ Status da campanha: `RASCUNHO`, `AGENDADA`, `ENVIANDO`, `CONCLUIDA`, `CANCELADA`
 | `POST /internal/leads/ingest` | `x-internal-key` + só rede interna | n8n (Meta Ads) |
 | `POST /internal/cadence/run` | idem | n8n (a cada 5 min) |
 | `POST /internal/ai/result` | idem | n8n (Claude) |
+| `POST /internal/imobzi/import` | idem | Importa Contatos do Imobzi (Base Antiga). `{ max?, dryRun? }` |
+| `POST /internal/imobzi/sync-owners` | idem | Sincroniza o corretor responsável dos negócios do Imobzi. `{ max?, dryRun? }` |
+
+### Sincronização do responsável do Imobzi (`/internal/imobzi/sync-owners`)
+
+Lê os negócios do funil do Imobzi (`GET /v1/deals/search`, paginado por `cursor`) e copia o **corretor responsável** (`deal.user.email`) para o `brokerId` do lead correspondente no CRM.
+
+- **De-para por e-mail**: `deal.user.email` casa com `users.email` do CRM (precisa que o corretor exista no CRM com o mesmo e-mail do Imobzi).
+- **Casa o lead** pelo telefone do contato do negócio (chave canônica, resolve o 9º dígito) e, na falta, pelo e-mail.
+- **Só preenche onde está vazio**: se o lead já tem corretor — mesmo diferente do Imobzi — **não sobrescreve** (respeita transferências manuais); registra como `divergent` para revisão.
+- `dryRun: true` → só relata o que faria (rode primeiro). Resposta: `{ deals, matched, updated, alreadySet, divergent, noLead, noUser, noOwner, divergences[], unmatchedOwners[], done }`.
+- Requer `IMOBZI_API_SECRET` com acesso ao módulo de **Negócios** no Imobzi.
 
 ### Leads de formulário do Meta (`/webhooks/meta-leadgen`)
 
