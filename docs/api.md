@@ -132,8 +132,11 @@ Lê os negócios do funil do Imobzi (`GET /v1/deals/search`, paginado por `curso
 
 - **De-para por e-mail**: `deal.user.email` casa com `users.email` do CRM (precisa que o corretor exista no CRM com o mesmo e-mail do Imobzi).
 - **Casa o lead** pelo telefone do contato do negócio (chave canônica, resolve o 9º dígito) e, na falta, pelo e-mail.
-- **Só preenche onde está vazio**: se o lead já tem corretor — mesmo diferente do Imobzi — **não sobrescreve** (respeita transferências manuais); registra como `divergent` para revisão.
-- `dryRun: true` → só relata o que faria (rode primeiro). Resposta: `{ deals, matched, updated, alreadySet, divergent, noLead, noUser, noOwner, divergences[], unmatchedOwners[], done }`.
+- **Negócios múltiplos**: quando o mesmo contato tem vários negócios no Imobzi, usa o **mais recente** (`stage_date`, com fallback em `created_at`) como responsável atual.
+- **Modos**:
+  - `overwrite: false` (padrão): **só preenche onde está vazio**; respeita quem já tem corretor (registra em `divergences`, sem alterar).
+  - `overwrite: true` ("espelhar o Imobzi"): **realinha também** quem já tem corretor diferente, para a distribuição do CRM bater exatamente com a do Imobzi (registra em `reassignments`, evento `lead.transferred` com `via: "imobzi"`).
+- `dryRun: true` → só relata o que faria (rode primeiro). Resposta: `{ deals, leads, multiDeal, filled, reassigned, alreadySet, divergent, noLead, noUser, noOwner, reassignments[], divergences[], unmatchedOwners[], overwrite, done }`.
 - Requer `IMOBZI_API_SECRET` com acesso ao módulo de **Negócios** no Imobzi.
 
 ### Leads de formulário do Meta (`/webhooks/meta-leadgen`)

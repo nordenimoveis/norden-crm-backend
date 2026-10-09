@@ -66,7 +66,14 @@ export default async function internalRoutes(app: FastifyInstance) {
    * (de-para por e-mail; só preenche onde está vazio). dryRun só relata o que faria.
    */
   app.post('/internal/imobzi/sync-owners', async (req) => {
-    const b = z.object({ max: z.number().int().positive().optional(), dryRun: z.boolean().optional() }).parse(req.body ?? {});
+    const b = z
+      .object({
+        max: z.number().int().positive().optional(),
+        dryRun: z.boolean().optional(),
+        /** true = espelha o Imobzi (realinha quem já tem corretor); false = só preenche vazios. */
+        overwrite: z.boolean().optional(),
+      })
+      .parse(req.body ?? {});
     return syncImobziOwners(b);
   });
 

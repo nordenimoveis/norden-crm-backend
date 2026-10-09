@@ -101,6 +101,10 @@ export interface ImobziDeal {
   title?: string | null;
   status?: string | null;
   stage_name?: string | null;
+  /** Data em que entrou na etapa atual (ISO). Usada para escolher o negócio mais recente. */
+  stage_date?: string | null;
+  /** Data de criação do negócio (ISO). Fallback para a escolha do mais recente. */
+  created_at?: string | null;
   contact?: ImobziDealContact | null;
   /** Responsável atual do negócio no Imobzi. */
   user?: ImobziDealUser | null;
@@ -151,4 +155,13 @@ export function dealContactEmail(d: ImobziDeal): string | null {
   const e = d.contact?.email;
   const first = Array.isArray(e) ? e[0] : e;
   return (first || '').trim().toLowerCase() || null;
+}
+
+/**
+ * "Idade" do negócio para escolher o mais recente quando um contato tem vários:
+ * usa a data da etapa e, na falta, a de criação. Retorna epoch ms (0 se não houver data).
+ */
+export function dealTimestamp(d: ImobziDeal): number {
+  const t = Date.parse(d.stage_date || '') || Date.parse(d.created_at || '');
+  return Number.isNaN(t) ? 0 : t;
 }
