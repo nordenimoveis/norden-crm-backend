@@ -31,20 +31,46 @@ export interface ImobziContactsPage {
   count: string | null;
 }
 
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * GET autenticado na API do Imobzi, resiliente: timeout de 60s e até 3 tentativas
+ * com backoff (2s, 4s) para timeouts/erros de rede e respostas 5xx. A API às vezes
+ * responde devagar; sem isso, uma página lenta derruba a operação inteira.
+ */
+async function imobziGet<T>(path: string, fetchImpl: typeof fetch, label: string): Promise<T> {
+  const { IMOBZI_API_BASE_URL, IMOBZI_API_SECRET } = env();
+  const url = `${IMOBZI_API_BASE_URL.replace(/\/$/, '')}${path}`;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    let res: Response;
+    try {
+      res = await fetchImpl(url, {
+        headers: { 'X-Imobzi-Secret': IMOBZI_API_SECRET },
+        signal: AbortSignal.timeout(60_000),
+      });
+    } catch (err) {
+      lastErr = err; // timeout ou falha de rede
+      if (attempt < 3) { await delay(attempt * 2000); continue; }
+      throw err;
+    }
+    if (res.ok) return (await res.json()) as T;
+    const text = await res.text().catch(() => '');
+    // 5xx = instabilidade, tenta de novo; 4xx = erro definitivo (token/permissão).
+    if (res.status >= 500 && attempt < 3) {
+      lastErr = new Error(`Imobzi (${label}) respondeu ${res.status}`);
+      await delay(attempt * 2000);
+      continue;
+    }
+    throw new Error(`Imobzi (${label}) respondeu ${res.status}: ${text.slice(0, 200)}`);
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(`Imobzi (${label}) falhou`);
+}
+
 /** Busca uma página de contatos. `cursor` nulo = primeira página. */
 export async function fetchImobziContacts(cursor: string | null, fetchImpl: typeof fetch = fetch): Promise<ImobziContactsPage> {
-  const { IMOBZI_API_BASE_URL, IMOBZI_API_SECRET } = env();
-  const base = IMOBZI_API_BASE_URL.replace(/\/$/, '');
-  const url = `${base}/v1/contacts${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
-  const res = await fetchImpl(url, {
-    headers: { 'X-Imobzi-Secret': IMOBZI_API_SECRET },
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Imobzi (contacts) respondeu ${res.status}: ${text.slice(0, 200)}`);
-  }
-  const data = (await res.json()) as { contacts?: ImobziContact[]; cursor?: string | null; count?: string | null };
+  const path = `/v1/contacts${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
+  const data = await imobziGet<{ contacts?: ImobziContact[]; cursor?: string | null; count?: string | null }>(path, fetchImpl, 'contacts');
   return { contacts: data.contacts ?? [], cursor: data.cursor ?? null, count: data.count ?? null };
 }
 
@@ -121,18 +147,8 @@ export interface ImobziDealsPage {
  * Usa `/v1/deals/search` (a lista plana); `/v1/deals` vem agrupada por etapa.
  */
 export async function fetchImobziDeals(cursor: string | null, fetchImpl: typeof fetch = fetch): Promise<ImobziDealsPage> {
-  const { IMOBZI_API_BASE_URL, IMOBZI_API_SECRET } = env();
-  const base = IMOBZI_API_BASE_URL.replace(/\/$/, '');
-  const url = `${base}/v1/deals/search${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
-  const res = await fetchImpl(url, {
-    headers: { 'X-Imobzi-Secret': IMOBZI_API_SECRET },
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Imobzi (deals) respondeu ${res.status}: ${text.slice(0, 200)}`);
-  }
-  const data = (await res.json()) as { deals?: ImobziDeal[]; cursor?: string | null; count?: string | null };
+  const path = `/v1/deals/search${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
+  const data = await imobziGet<{ deals?: ImobziDeal[]; cursor?: string | null; count?: string | null }>(path, fetchImpl, 'deals');
   return { deals: data.deals ?? [], cursor: data.cursor ?? null, count: data.count ?? null };
 }
 

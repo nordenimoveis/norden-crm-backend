@@ -172,9 +172,9 @@ export async function syncImobziOwners(
           await tx.update(leads).set({ brokerId, updatedAt: new Date() }).where(eq(leads.id, lead.id));
           await logEvent(tx, lead.id, 'lead.assigned', { brokerId, brokerName, via: 'imobzi' });
         });
+        updated.push({ leadId: lead.id, brokerId });
       }
       r.filled++;
-      updated.push({ leadId: lead.id, brokerId });
       continue;
     }
 
@@ -191,10 +191,10 @@ export async function syncImobziOwners(
         await tx.update(leads).set({ brokerId, updatedAt: new Date() }).where(eq(leads.id, lead.id));
         await logEvent(tx, lead.id, 'lead.transferred', { fromBrokerId: lead.brokerId, toBrokerId: brokerId, brokerName, via: 'imobzi' });
       });
+      updated.push({ leadId: lead.id, brokerId });
     }
     r.reassigned++;
     if (r.reassignments.length < 100) r.reassignments.push({ leadId: lead.id, leadName: lead.name, atual, imobzi: brokerName });
-    updated.push({ leadId: lead.id, brokerId });
   }
 
   r.unmatchedOwners = Array.from(unmatched);
