@@ -38,9 +38,12 @@ services:
       CRM_PANEL_DOMAIN: ${CRM_PANEL_DOMAIN}
       CHATWOOT_DOMAIN: ${CHATWOOT_DOMAIN}
       N8N_DOMAIN: ${N8N_DOMAIN}
+      # Domínio das landing pages estáticas (empreendimentos). Default seguro para não quebrar o Caddy.
+      LANDING_DOMAIN: ${LANDING_DOMAIN:-materiais.nordenimoveis.com.br}
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./landing:/srv/landing:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on: [crm-api, painel, chatwoot-web, n8n]

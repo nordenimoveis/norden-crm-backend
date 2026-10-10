@@ -33,3 +33,14 @@
 	encode gzip
 	reverse_proxy n8n:5678
 }
+
+# Landing pages estáticas de empreendimentos (ex.: /wave). Públicas, para Google Ads.
+# Servidas da pasta infra/landing (montada em /srv/landing no contêiner do Caddy).
+{$LANDING_DOMAIN} {
+	encode gzip
+	root * /srv/landing
+	file_server
+	# cache longo para imagens e PDF (assets versionados pela pasta do empreendimento)
+	@assets path *.jpg *.jpeg *.png *.webp *.svg *.pdf *.woff2
+	header @assets Cache-Control "public, max-age=604800"
+}
