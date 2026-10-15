@@ -244,31 +244,14 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   .reveal{opacity:1}
 </style>
 
-<!-- Google Analytics (GA4) + conversão do Google Ads.
-     Preencha os dois IDs abaixo quando criar as contas. Vazio = nada carrega. -->
+<!-- Medição 100% pelo Google Tag Manager (GTM-NJSG86T).
+     O clique no WhatsApp empurra o evento "contato_whatsapp" no dataLayer;
+     configure no GTM um acionador de evento personalizado com esse nome para
+     disparar GA4 e/ou a conversão do Google Ads. -->
 <script>
-  var GA_ID = "G-H6ECN32GGR";   // GA4
-  var ADS_SEND_TO = "";    // Google Ads conversão: "AW-XXXXXXXXX/AbCdEf..."
-  (function(){
-    if(!GA_ID && !ADS_SEND_TO) return;
-    var id = GA_ID || ADS_SEND_TO.split('/')[0];
-    var s = document.createElement('script');
-    s.async = true; s.src = "https://www.googletagmanager.com/gtag/js?id=" + id;
-    document.head.appendChild(s);
-    window.dataLayer = window.dataLayer || [];
-    window.gtag = function(){ dataLayer.push(arguments); };
-    gtag('js', new Date());
-    if(GA_ID) gtag('config', GA_ID);
-    if(ADS_SEND_TO) gtag('config', ADS_SEND_TO.split('/')[0]);
-  })();
-  // Dispara evento de contato (GA4) e conversão (Ads) ao clicar no WhatsApp.
+  window.dataLayer = window.dataLayer || [];
   function trackWhats(){
-    try{
-      if(window.gtag){
-        gtag('event', 'contato_whatsapp', { event_category: 'engajamento', event_label: 'WAVE Jurerê' });
-        if(ADS_SEND_TO) gtag('event', 'conversion', { send_to: ADS_SEND_TO });
-      }
-    }catch(e){}
+    try{ window.dataLayer.push({ event: 'contato_whatsapp', item: 'WAVE Jurerê' }); }catch(e){}
   }
 </script>
 
