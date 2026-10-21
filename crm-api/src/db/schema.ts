@@ -327,6 +327,17 @@ export const whatsappTemplates = pgTable('whatsapp_templates', {
   /** Texto exibido no preview/histórico, com {{1}}, {{2}}… ou {{lead_first_name}}. */
   preview: text('preview').notNull(),
   paramSources: text('param_sources').array().notNull().default(sql`'{}'::text[]`),
+  /**
+   * Formato do cabeçalho de mídia na Meta: 'IMAGE' | 'VIDEO' | 'DOCUMENT'.
+   * null = sem cabeçalho de mídia (texto ou nenhum). Detectado na sincronização.
+   */
+  headerFormat: text('header_format'),
+  /**
+   * URL pública e fixa da mídia do cabeçalho (a mesma para todos os destinatários).
+   * A Meta não devolve a imagem real do template aprovado, então o gestor a configura aqui.
+   * Precisa estar acessível sem login (exigência do WhatsApp).
+   */
+  headerMediaUrl: text('header_media_url'),
   active: boolean('active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -345,6 +356,9 @@ export const campaigns = pgTable(
     templateName: text('template_name').notNull(),
     templatePreview: text('template_preview').notNull(),
     paramSources: text('param_sources').array().notNull().default(sql`'{}'::text[]`),
+    /** Snapshot do cabeçalho de mídia do template (ver whatsapp_templates). */
+    headerFormat: text('header_format'),
+    headerMediaUrl: text('header_media_url'),
     status: campaignStatus('status').notNull().default('RASCUNHO'),
     /** Filtros usados para montar o público (referência/auditoria). */
     filters: jsonb('filters').$type<Record<string, unknown>>().notNull().default({}),

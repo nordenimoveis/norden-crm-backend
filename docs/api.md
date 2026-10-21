@@ -87,8 +87,8 @@ auditável. Só templates (sem texto livre). Respeita horário comercial e
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET / POST | `/campaign-templates` | Catálogo de templates (`{ name, preview, paramSources[], language?, category? }`) |
-| PATCH / DELETE | `/campaign-templates/:id` | Editar/desativar/excluir template |
+| GET / POST | `/campaign-templates` | Catálogo de templates (`{ name, preview, paramSources[], language?, category?, headerFormat?, headerMediaUrl? }`) |
+| PATCH / DELETE | `/campaign-templates/:id` | Editar/desativar/excluir template (inclui `headerMediaUrl`, `""` limpa) |
 | POST | `/campaigns/preview-audience` | `{ stages?, temperatures?, sources?, brokerId?, includeOld? }` → `{ count }` (só leads com telefone) |
 | GET | `/campaigns` | Lista com status e progresso (`total`, `sent`, `failed`) |
 | GET | `/campaigns/:id` | Detalhe + `pending` |
@@ -99,6 +99,14 @@ auditável. Só templates (sem texto livre). Respeita horário comercial e
 | POST | `/internal/campaigns/run` | `x-internal-key` — executor chamado pelo n8n |
 
 Status da campanha: `RASCUNHO`, `AGENDADA`, `ENVIANDO`, `CONCLUIDA`, `CANCELADA`.
+
+**Templates com cabeçalho de imagem.** A sincronização com a Meta detecta o
+cabeçalho de mídia e grava `headerFormat` (`IMAGE` | `VIDEO` | `DOCUMENT`). A Meta
+**não** devolve a imagem real do template aprovado, então o gestor configura a URL
+pública fixa em `headerMediaUrl` (via `PATCH /campaign-templates/:id`). Criar uma
+campanha com um template de mídia **sem** `headerMediaUrl` é recusado (400). No
+envio, o CRM manda `processed_params.header = { media_url, media_type }` ao lado do
+corpo (formato documentado do Chatwoot). A URL precisa ser acessível sem login.
 
 ## Tempo real
 

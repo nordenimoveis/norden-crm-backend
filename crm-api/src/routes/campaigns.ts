@@ -25,6 +25,8 @@ export default async function campaignRoutes(app: FastifyInstance) {
       category: t.category,
       preview: t.preview,
       paramSources: t.paramSources,
+      headerFormat: t.headerFormat,
+      headerMediaUrl: t.headerMediaUrl,
       active: t.active,
     }));
   });
@@ -42,6 +44,8 @@ export default async function campaignRoutes(app: FastifyInstance) {
         paramSources: z.array(z.string().max(120)).max(10).optional(),
         language: z.string().max(10).optional(),
         category: z.string().max(30).optional(),
+        headerFormat: z.enum(['IMAGE', 'VIDEO', 'DOCUMENT']).nullish(),
+        headerMediaUrl: z.string().url().max(2000).nullish(),
       })
       .parse(req.body);
     return reply.code(201).send(await svc.createTemplate(b));
@@ -54,6 +58,8 @@ export default async function campaignRoutes(app: FastifyInstance) {
         preview: z.string().min(1).max(2000).optional(),
         paramSources: z.array(z.string().max(120)).max(10).optional(),
         active: z.boolean().optional(),
+        // URL pública do cabeçalho de mídia (imagem/vídeo/documento). "" limpa.
+        headerMediaUrl: z.union([z.string().url().max(2000), z.literal('')]).optional(),
       })
       .parse(req.body);
     return svc.updateTemplate(req.params.id, b);

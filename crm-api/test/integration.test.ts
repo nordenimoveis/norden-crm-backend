@@ -451,6 +451,48 @@ if (!DB) {
       assert.equal(detail.sent, camp.total);
     });
 
+    await t.test('campanha com cabeçalho de imagem: exige URL e envia a mídia ao Chatwoot', async () => {
+      // Template com cabeçalho de imagem, mas SEM a URL configurada ainda.
+      const tplNoMedia = await app.inject({
+        method: 'POST',
+        url: '/campaign-templates',
+        headers: as('dono'),
+        payload: { name: 'norden_aura_lancamento', preview: 'Olá {{lead_first_name}}, novidade em Jurerê!', paramSources: ['{{lead_first_name}}'], headerFormat: 'IMAGE' },
+      });
+      assert.equal(tplNoMedia.statusCode, 201, tplNoMedia.body);
+      const auraId = tplNoMedia.json().id;
+
+      // Criar campanha sem a imagem do cabeçalho → recusa (a Meta exigiria o componente).
+      const blocked = await app.inject({ method: 'POST', url: '/campaigns', headers: as('dono'), payload: { name: 'Aura sem imagem', templateId: auraId, filters: { includeOld: false } } });
+      assert.equal(blocked.statusCode, 400, 'campanha sem imagem de cabeçalho é recusada');
+
+      // Gestor configura a URL pública do cabeçalho.
+      const mediaUrl = 'https://materiais.nordenimoveis.com.br/aura/aura-fachada.jpg';
+      const patched = await app.inject({ method: 'PATCH', url: `/campaign-templates/${auraId}`, headers: as('dono'), payload: { headerMediaUrl: mediaUrl } });
+      assert.equal(patched.statusCode, 200, patched.body);
+      assert.equal(patched.json().headerMediaUrl, mediaUrl);
+
+      // Agora a campanha é criada e disparada normalmente.
+      const created = await app.inject({ method: 'POST', url: '/campaigns', headers: as('dono'), payload: { name: 'Lançamento Aura', templateId: auraId, filters: { includeOld: false } } });
+      assert.equal(created.statusCode, 201, created.body);
+      const camp = created.json();
+      assert.equal(camp.headerMediaUrl, mediaUrl, 'o snapshot da campanha congela a imagem do cabeçalho');
+
+      await app.inject({ method: 'POST', url: `/campaigns/${camp.id}/launch`, headers: as('dono'), payload: {} });
+      const { runDueCampaigns } = await import('../src/services/campaigns.js');
+      const monday10 = DateTime.fromISO('2030-01-07T10:00', { zone: 'America/Sao_Paulo' }).toJSDate();
+      const res = await runDueCampaigns(100, monday10);
+      assert.ok(res.sent >= 1, JSON.stringify(res));
+
+      // O payload enviado ao Chatwoot carrega a mídia do cabeçalho no formato documentado.
+      const auraCall = calls.filter((c) => c.body?.template_params?.name === 'norden_aura_lancamento').at(-1);
+      assert.ok(auraCall, 'o template do Aura foi enviado ao Chatwoot');
+      const pp = auraCall!.body.template_params.processed_params;
+      assert.equal(pp.header.media_url, mediaUrl);
+      assert.equal(pp.header.media_type, 'image');
+      assert.ok(typeof pp.body['1'] === 'string' && pp.body['1'].length > 0, 'as variáveis de texto seguem no corpo');
+    });
+
     await t.test('leads do Meta: verificação do webhook e criação via formulário', async () => {
       const token = 'meta-hook-secret';
 

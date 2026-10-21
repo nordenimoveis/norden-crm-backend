@@ -10,6 +10,8 @@ import { env } from '../config.js';
 interface MetaComponent {
   type: string;
   text?: string;
+  /** No HEADER: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT'. */
+  format?: string;
 }
 
 interface MetaTemplate {
@@ -28,6 +30,8 @@ export interface ApprovedTemplate {
   preview: string;
   /** Fontes de cada variável, na ordem ({{lead_first_name}}, {{broker_first_name}}…). */
   paramSources: string[];
+  /** 'IMAGE' | 'VIDEO' | 'DOCUMENT' se o cabeçalho for de mídia; null se for texto ou não houver. */
+  headerFormat: string | null;
 }
 
 /**
@@ -60,6 +64,17 @@ export function mapBodyVariables(body: string): { preview: string; paramSources:
 function bodyText(t: MetaTemplate): string {
   const body = (t.components ?? []).find((c) => c.type?.toUpperCase() === 'BODY');
   return body?.text ?? '';
+}
+
+/**
+ * Formato do cabeçalho de MÍDIA do template ('IMAGE' | 'VIDEO' | 'DOCUMENT').
+ * Devolve null para cabeçalho de texto ou ausência de cabeçalho — só mídia nos
+ * interessa (exige uma URL pública no envio).
+ */
+function headerMediaFormat(t: MetaTemplate): string | null {
+  const header = (t.components ?? []).find((c) => c.type?.toUpperCase() === 'HEADER');
+  const format = header?.format?.toUpperCase();
+  return format && format !== 'TEXT' ? format : null;
 }
 
 /**
@@ -96,6 +111,7 @@ export async function fetchApprovedTemplates(fetchImpl: typeof fetch = fetch): P
         category: t.category,
         preview: preview || t.name,
         paramSources,
+        headerFormat: headerMediaFormat(t),
       });
     }
     url = data.paging?.next ?? '';

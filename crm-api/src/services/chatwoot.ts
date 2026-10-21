@@ -34,6 +34,13 @@ export interface TemplateSend {
   name: string;
   /** Valores das variáveis do template, na ordem {{1}}, {{2}}... */
   params: string[];
+  /**
+   * Cabeçalho de mídia (quando o template foi aprovado com imagem/vídeo/documento).
+   * `headerMediaUrl` precisa ser uma URL pública (sem login — exigência do WhatsApp).
+   * `headerFormat` é o formato da Meta ('IMAGE' | 'VIDEO' | 'DOCUMENT').
+   */
+  headerMediaUrl?: string | null;
+  headerFormat?: string | null;
 }
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -205,8 +212,19 @@ export class ChatwootClient {
    */
   async sendTemplate(conversationId: number, tpl: TemplateSend, previewText: string, token?: string): Promise<ChatwootMessage> {
     const e = env();
-    const processed: Record<string, string> = {};
-    tpl.params.forEach((v, i) => (processed[String(i + 1)] = v));
+    const body: Record<string, string> = {};
+    tpl.params.forEach((v, i) => (body[String(i + 1)] = v));
+
+    // Sem cabeçalho de mídia: mantém o formato numerado plano, comprovado em produção.
+    // Com mídia: formato documentado do Chatwoot (processed_params.header + .body).
+    // Ref.: https://developers.chatwoot.com/api-reference/messages/create-new-message
+    const processed: Record<string, unknown> = tpl.headerMediaUrl
+      ? {
+          header: { media_url: tpl.headerMediaUrl, media_type: (tpl.headerFormat ?? 'IMAGE').toLowerCase() },
+          body,
+        }
+      : body;
+
     return this.request<ChatwootMessage>(
       'POST',
       `/conversations/${conversationId}/messages`,

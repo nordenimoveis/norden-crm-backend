@@ -134,6 +134,7 @@ O teste de integração exige um banco **vazio e já migrado** (`DATABASE_URL=..
 - **Arquitetura escolhida: esta (Chatwoot + Drizzle + VPS)** — não a do sistema antigo (Prisma/Meta-direto no Railway/Vercel). O painel novo é o front desta arquitetura.
 - **Sem Instagram DM/Messenger/comentários** aqui → **o vídeo/App Review da Meta não é mais necessário** (ele era das permissões de Login do IG/Messenger). Para WhatsApp, continua a conexão do app/WABA, a verificação da empresa e a aprovação de templates — nada disso depende do vídeo.
 - **Campanhas de disparo em massa**: portadas para esta arquitetura (o sistema antigo tinha; a base nova não tinha). Ver `src/services/campaigns.ts` e `docs/api.md`. Público congelado, só template aprovado, horário comercial, `CAMPAIGN_SEND_ENABLED`, executor via n8n (`/internal/campaigns/run`).
+  - **Templates com cabeçalho de imagem**: a sincronização com a Meta grava `whatsapp_templates.headerFormat`; a URL pública fixa da imagem fica em `headerMediaUrl` (a Meta não devolve a imagem real, o gestor configura). Criar campanha de template de mídia sem URL é recusado. No envio, `chatwoot.ts sendTemplate` manda `processed_params.header = { media_url, media_type }` ao lado do corpo. ⚠️ O formato exato do Chatwoot 4.x p/ cabeçalho de mídia ainda precisa de teste no ambiente real (bug conhecido chatwoot#13159); validar com um envio de prova antes do disparo em massa.
 
 ## Pendências para validar no ambiente real
 

@@ -39,6 +39,8 @@ export async function createTemplate(input: {
   paramSources?: string[];
   language?: string;
   category?: string;
+  headerFormat?: string | null;
+  headerMediaUrl?: string | null;
 }): Promise<WhatsappTemplate> {
   const name = input.name.trim();
   const preview = input.preview.trim();
@@ -52,6 +54,8 @@ export async function createTemplate(input: {
       paramSources: input.paramSources ?? [],
       language: input.language?.trim() || 'pt_BR',
       category: input.category?.trim() || 'MARKETING',
+      headerFormat: input.headerFormat ?? null,
+      headerMediaUrl: input.headerMediaUrl?.trim() || null,
     })
     .returning();
   return row!;
@@ -59,13 +63,21 @@ export async function createTemplate(input: {
 
 export async function updateTemplate(
   id: string,
-  patch: { name?: string; preview?: string; paramSources?: string[]; active?: boolean },
+  patch: {
+    name?: string;
+    preview?: string;
+    paramSources?: string[];
+    active?: boolean;
+    headerMediaUrl?: string | null;
+  },
 ): Promise<WhatsappTemplate> {
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (patch.name !== undefined) set.name = patch.name.trim();
   if (patch.preview !== undefined) set.preview = patch.preview.trim();
   if (patch.paramSources !== undefined) set.paramSources = patch.paramSources;
   if (patch.active !== undefined) set.active = patch.active;
+  // URL do cabeçalho: string vazia limpa; a detecção do formato vem da sincronização com a Meta.
+  if (patch.headerMediaUrl !== undefined) set.headerMediaUrl = patch.headerMediaUrl?.trim() || null;
   const [row] = await db.update(whatsappTemplates).set(set).where(eq(whatsappTemplates.id, id)).returning();
   if (!row) throw notFound('Template');
   return row;
@@ -105,6 +117,9 @@ export async function syncCampaignTemplates(): Promise<SyncResult> {
           preview: t.preview,
           paramSources: t.paramSources,
           category: t.category,
+          // Atualiza o formato do cabeçalho detectado na Meta, mas NÃO mexe na
+          // headerMediaUrl — essa URL é configurada pelo gestor e a Meta não a devolve.
+          headerFormat: t.headerFormat,
           active: true,
           updatedAt: new Date(),
         })
@@ -117,6 +132,7 @@ export async function syncCampaignTemplates(): Promise<SyncResult> {
         category: t.category,
         preview: t.preview,
         paramSources: t.paramSources,
+        headerFormat: t.headerFormat,
       });
       imported++;
     }
@@ -162,6 +178,8 @@ function view(c: Campaign) {
     name: c.name,
     templateName: c.templateName,
     templatePreview: c.templatePreview,
+    headerFormat: c.headerFormat,
+    headerMediaUrl: c.headerMediaUrl,
     status: c.status,
     scheduledFor: c.scheduledFor,
     total: c.total,
@@ -242,6 +260,14 @@ export async function createCampaign(
   if (!name) throw badRequest('Informe o nome da campanha');
   const template = await assertTemplate(input.templateId);
 
+  // Template com cabeçalho de mídia exige a URL configurada antes do disparo —
+  // a Meta recusa o envio sem o componente de cabeçalho preenchido.
+  if (template.headerFormat && !template.headerMediaUrl) {
+    throw badRequest(
+      `O template "${template.name}" tem cabeçalho de ${template.headerFormat.toLowerCase()} e ainda não tem uma imagem/URL configurada. Defina a mídia do cabeçalho antes de criar a campanha.`,
+    );
+  }
+
   const audience = await db
     .select({ id: leads.id })
     .from(leads)
@@ -256,6 +282,8 @@ export async function createCampaign(
         templateName: template.name,
         templatePreview: template.preview,
         paramSources: template.paramSources,
+        headerFormat: template.headerFormat,
+        headerMediaUrl: template.headerMediaUrl,
         filters: input.filters as Record<string, unknown>,
         total: audience.length,
         createdBy: userId,
@@ -389,7 +417,12 @@ export async function runDueCampaigns(limit = env().CAMPAIGN_BATCH_SIZE, now = n
         const conversationId = await ensureConversation(lead, broker);
         await chatwoot().sendTemplate(
           conversationId,
-          { name: campaign.templateName, params },
+          {
+            name: campaign.templateName,
+            params,
+            headerFormat: campaign.headerFormat,
+            headerMediaUrl: campaign.headerMediaUrl,
+          },
           renderTemplate(campaign.templatePreview, ctx),
           brokerToken(broker),
         );
