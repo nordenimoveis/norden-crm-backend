@@ -7,6 +7,7 @@ import { runDueSteps } from '../services/cadence.js';
 import { runDueCampaigns } from '../services/campaigns.js';
 import { importImobziContacts } from '../services/imobzi-import.js';
 import { syncImobziOwners } from '../services/imobzi-owner-sync.js';
+import { assignOrphanResponders } from '../services/incoming.js';
 import { ingestLead } from '../services/leads.js';
 import { runMetaPoll } from '../services/meta-poll.js';
 import { dedupAllByPhone } from '../services/dedup.js';
@@ -41,6 +42,12 @@ export default async function internalRoutes(app: FastifyInstance) {
   });
 
   app.post('/internal/cadence/run', async () => runDueSteps());
+
+  /**
+   * Backfill pontual: atribui pela roleta os leads que já responderam mas estão
+   * sem corretor (respostas de disparo em massa que entraram sem dono).
+   */
+  app.post('/internal/leads/assign-responders', async (req) => assignOrphanResponders(req.log));
 
   app.post('/internal/campaigns/run', async () => runDueCampaigns());
 

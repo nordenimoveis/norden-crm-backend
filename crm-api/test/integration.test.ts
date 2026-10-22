@@ -263,6 +263,25 @@ if (!DB) {
       assert.equal(site.email, 'site@x.com');
     });
 
+    await t.test('resposta de lead sem corretor cai na roleta (disparo em massa)', async () => {
+      const { ingestLead } = await import('../src/services/leads.js');
+      const { eq } = await import('drizzle-orm');
+      // Lead da Base Antiga: entra sem corretor (sem roleta, sem cadência).
+      const orphan = await ingestLead({ name: 'Base Resp', phone: '48 96666-5432', source: 'BASE_ANTIGA' });
+      assert.equal(orphan.lead.brokerId, null, 'base antiga entra sem corretor');
+
+      // Ele responde a um disparo → deve cair na roleta e ganhar um dono.
+      const r = await app.inject({
+        method: 'POST', url: `/webhooks/chatwoot?token=${cwHook}`,
+        payload: { event: 'message_created', id: 77, content: 'Tenho interesse no Aura', message_type: 'incoming', private: false, conversation: { id: 7777, meta: { sender: { phone_number: '+5548966665432' } } } },
+      });
+      assert.equal(r.json().handled, 'entrada');
+
+      const [after] = await db.select().from(schema.leads).where(eq(schema.leads.id, orphan.lead.id));
+      assert.ok(after.brokerId, 'respondente sem dono recebeu um corretor pela roleta');
+      assert.equal(after.stage, 'AGUARDANDO_RESPOSTA');
+    });
+
     await t.test('passo final (despedida) leva o lead para Lead Frio', async () => {
       const { runDueSteps, FINAL_STEP } = await import('../src/services/cadence.js');
       const { sql } = await import('drizzle-orm');

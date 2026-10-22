@@ -1,6 +1,6 @@
-import { and, desc, eq, gte, isNotNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNotNull, isNull, lte } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { campaignRecipients, leads, type Lead } from '../db/schema.js';
+import { campaignRecipients, leads, type Lead, type User } from '../db/schema.js';
 import { bus } from '../lib/events.js';
 import {
   type CtwaReferral,
@@ -17,6 +17,7 @@ import { cancelPendingTasks } from './tasks.js';
 import { chatwoot, LABELS } from './chatwoot.js';
 import { loadBroker } from './conversation.js';
 import { ingestLead } from './leads.js';
+import { pickNextBroker } from './roleta.js';
 import { notifyInbound } from './push.js';
 import { logEvent } from './timeline.js';
 
@@ -80,7 +81,7 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
   // Reabrir um lead que estava Perdido quando reengaja por um disparo novo.
   const reopeningLost = reengage && target.lostAt !== null;
 
-  const updated = await db.transaction(async (tx) => {
+  const { updated, assignedBroker } = await db.transaction(async (tx) => {
     await cancelPendingSteps(tx, target.id, 'Cliente respondeu');
     await cancelPendingTasks(tx, target.id, 'Cliente respondeu');
     const tags = Array.from(new Set([...target.tags, TAG_ATENDIMENTO_HUMANO]));
@@ -92,6 +93,15 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
       reengage ? { inboxStatus: 'NOVO' as const }
       : isInboxLead && !target.inboxStatus ? { inboxStatus: 'NOVO' as const }
       : {};
+    // Resposta de um lead SEM corretor (ex.: Base Antiga que respondeu a um disparo)
+    // entra na roleta (round-robin): garante que alguém atenda e distribui entre os
+    // corretores ativos em rotação. Quem já tem dono continua com o seu.
+    let assignedBroker: User | null = null;
+    let brokerPatch: { brokerId?: string } = {};
+    if (!target.brokerId) {
+      assignedBroker = await pickNextBroker(tx);
+      if (assignedBroker) brokerPatch = { brokerId: assignedBroker.id };
+    }
     const [row] = await tx
       .update(leads)
       .set({
@@ -101,6 +111,7 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
         chatwootConversationId: conversationId,
         ...(respondingCampaignId ? { lastCampaignId: respondingCampaignId } : {}),
         ...inboxPatch,
+        ...brokerPatch,
         ...(reopeningLost ? { lostAt: null, lostReasonId: null } : {}),
         ...(origin?.patch ?? {}),
         updatedAt: now,
@@ -109,9 +120,18 @@ export async function handleChatwootWebhook(p: ChatwootWebhook, log: Logger): Pr
       .returning();
     await logEvent(tx, target.id, 'message.inbound', { messageId: p.id, preview: (p.content ?? '').slice(0, 200) });
     if (reengage) await logEvent(tx, target.id, 'lead.reentry', { campaignId: respondingCampaignId, reopenedFromLost: reopeningLost });
+    if (assignedBroker) await logEvent(tx, target.id, 'lead.assigned', { brokerId: assignedBroker.id, brokerName: assignedBroker.name, via: 'roleta_resposta' });
     if (origin?.patch) await logEvent(tx, target.id, 'lead.enriched', origin.detail);
-    return row!;
+    return { updated: row!, assignedBroker };
   });
+
+  // Atribui a conversa ao agente do corretor no Chatwoot (mensagens saem no nome dele).
+  if (assignedBroker?.chatwootAgentId) {
+    chatwoot()
+      .assign(conversationId, assignedBroker.chatwootAgentId)
+      .catch((err) => log.warn(`Falha ao atribuir conversa ${conversationId} ao corretor: ${String(err)}`));
+  }
+  if (assignedBroker) bus.publish({ type: 'lead.assigned', leadId: updated.id, brokerId: updated.brokerId });
 
   chatwoot()
     .addLabels(conversationId, [LABELS.atendimentoHumano])
@@ -251,4 +271,43 @@ async function createLeadFromInbound(p: ChatwootWebhook, log: Logger): Promise<L
   }
   const [fresh] = await db.select().from(leads).where(eq(leads.id, lead.id));
   return fresh ?? null;
+}
+
+/**
+ * Backfill pontual: atribui pela roleta os leads que JÁ responderam (têm
+ * `lastInboundAt`) mas estão SEM corretor — ex.: respostas de um disparo em massa
+ * que entraram antes de a roleta na resposta existir. Idempotente: relê cada lead
+ * sob lock e só atribui quem continua órfão. Ordena pela resposta mais antiga
+ * (quem espera há mais tempo primeiro).
+ */
+export async function assignOrphanResponders(log: Logger): Promise<{ total: number; assigned: number; skipped: number }> {
+  const orphans = await db
+    .select({ id: leads.id, conversationId: leads.chatwootConversationId })
+    .from(leads)
+    .where(and(isNull(leads.brokerId), isNotNull(leads.lastInboundAt)))
+    .orderBy(asc(leads.lastInboundAt));
+
+  let assigned = 0;
+  let skipped = 0;
+  for (const o of orphans) {
+    const broker = await db.transaction(async (tx) => {
+      // Relê sob lock: outra resposta concorrente pode já ter atribuído este lead.
+      const [fresh] = await tx.select().from(leads).where(eq(leads.id, o.id)).for('update');
+      if (!fresh || fresh.brokerId) return null;
+      const b = await pickNextBroker(tx);
+      if (!b) return null;
+      await tx.update(leads).set({ brokerId: b.id, updatedAt: new Date() }).where(eq(leads.id, o.id));
+      await logEvent(tx, o.id, 'lead.assigned', { brokerId: b.id, brokerName: b.name, via: 'roleta_backfill' });
+      return b;
+    });
+    if (!broker) { skipped++; continue; }
+    assigned++;
+    if (o.conversationId && broker.chatwootAgentId) {
+      await chatwoot()
+        .assign(o.conversationId, broker.chatwootAgentId)
+        .catch((err) => log.warn(`Falha ao atribuir conversa ${o.conversationId}: ${String(err)}`));
+    }
+    bus.publish({ type: 'lead.assigned', leadId: o.id, brokerId: broker.id });
+  }
+  return { total: orphans.length, assigned, skipped };
 }

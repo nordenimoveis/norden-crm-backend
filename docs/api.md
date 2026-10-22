@@ -130,6 +130,7 @@ corpo (formato documentado do Chatwoot). A URL precisa ser acessível sem login.
 | `GET/POST /webhooks/meta-leadgen?token=` | `META_LEADGEN_TOKEN` | Meta Lead Ads (formulários) — captura **qualquer** formulário da página |
 | `POST /internal/leads/ingest` | `x-internal-key` + só rede interna | n8n (Meta Ads) |
 | `POST /internal/cadence/run` | idem | n8n (a cada 5 min) |
+| `POST /internal/leads/assign-responders` | idem | Backfill: atribui pela roleta os leads que já responderam mas estão sem corretor. `{ total, assigned, skipped }` |
 | `POST /internal/ai/result` | idem | n8n (Claude) |
 | `POST /internal/imobzi/import` | idem | Importa Contatos do Imobzi (Base Antiga). `{ max?, dryRun? }` |
 | `POST /internal/imobzi/sync-owners` | idem | Sincroniza o corretor responsável dos negócios do Imobzi. `{ max?, dryRun? }` |
