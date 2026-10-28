@@ -282,6 +282,33 @@ if (!DB) {
       assert.equal(after.stage, 'AGUARDANDO_RESPOSTA');
     });
 
+    await t.test('captura pública do site: cria lead SITE, com corretor e sem cadência', async () => {
+      // Honeypot preenchido → responde ok mas NÃO cria lead.
+      const bot = await app.inject({ method: 'POST', url: '/public/leads', payload: { name: 'Bot Spam', phone: '48 95555-0001', website: 'http://spam.example' } });
+      assert.equal(bot.statusCode, 200);
+      assert.deepEqual(bot.json(), { ok: true });
+
+      // Envio real do formulário do site.
+      const r = await app.inject({
+        method: 'POST',
+        url: '/public/leads',
+        payload: { name: 'Lead Site Form', phone: '48 95555-1234', interest: 'WAVE Jurerê', page: 'https://nordenimoveis.com.br/wave' },
+      });
+      assert.equal(r.statusCode, 201, r.body);
+      assert.deepEqual(r.json(), { ok: true });
+
+      const list = (await app.inject({ method: 'GET', url: '/leads', headers: as('dono') })).json();
+      assert.ok(!list.some((l: any) => l.name === 'Bot Spam'), 'honeypot não criou lead');
+      const lead = list.find((l: any) => l.name === 'Lead Site Form');
+      assert.ok(lead, 'lead do formulário do site entrou');
+      assert.equal(lead.source, 'SITE');
+      assert.ok(lead.brokerId, 'roleta atribuiu um corretor ao lead do site');
+
+      const detail = (await app.inject({ method: 'GET', url: `/leads/${lead.id}`, headers: as('dono') })).json();
+      assert.equal(detail.lead.interest, 'WAVE Jurerê');
+      assert.equal(detail.cadence.length, 0, 'site com WhatsApp direto não agenda cadência');
+    });
+
     await t.test('passo final (despedida) leva o lead para Lead Frio', async () => {
       const { runDueSteps, FINAL_STEP } = await import('../src/services/cadence.js');
       const { sql } = await import('drizzle-orm');
