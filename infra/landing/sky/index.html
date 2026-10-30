@@ -209,6 +209,27 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   @media(max-width:620px){.wa-float{padding:0;width:56px;justify-content:center}.wa-float .wa-label{display:none}}
   @media(prefers-reduced-motion:no-preference){.wa-float{animation:waIn .4s ease .8s both}}
   @keyframes waIn{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:none}}
+
+  /* ---- Lightbox (ampliar imagens) ---- */
+  .zoomable{cursor:zoom-in}
+  .lb{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;
+    background:rgba(8,10,14,.95);padding:clamp(.5rem,3vw,2rem);overflow:auto;overscroll-behavior:contain}
+  .lb.open{display:flex}
+  .lb img{max-width:94vw;max-height:92vh;width:auto;height:auto;object-fit:contain;border-radius:3px;
+    box-shadow:0 20px 60px rgba(0,0,0,.55);cursor:zoom-in;background:#fff}
+  .lb img.zoom{max-width:none;max-height:none;cursor:zoom-out}
+  .lb-close{position:fixed;top:clamp(.6rem,2vw,1.2rem);right:clamp(.6rem,2vw,1.2rem);z-index:210;
+    width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:rgba(18,20,24,.82);
+    color:var(--fg);font-size:1.5rem;line-height:1;display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(6px);transition:all .2s}
+  .lb-close:hover{border-color:var(--brass);color:var(--brass-soft)}
+  .lb-hint{position:fixed;bottom:clamp(.8rem,3vw,1.6rem);left:50%;transform:translateX(-50%);z-index:210;
+    font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);pointer-events:none}
+  /* selo "ampliar" nas figuras de planta */
+  .amen-fig,.feature-fig{position:relative}
+  .zoom-badge{position:absolute;top:.7rem;right:.7rem;z-index:2;display:inline-flex;align-items:center;gap:.4rem;
+    padding:.4rem .65rem;border-radius:999px;background:rgba(18,20,24,.74);color:var(--fg);
+    font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;pointer-events:none}
+  .zoom-badge svg{width:13px;height:13px;stroke:currentColor;fill:none}
 </style>
 
 <!-- Medição 100% pelo Google Tag Manager (GTM-NJSG86T).
@@ -298,7 +319,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   <!-- ARQUITETURA -->
   <section class="band-ink2">
     <div class="wrap split">
-      <div class="split-media"><img src="img/frontal.jpg" alt="Fachada frontal do SKY, com terraços escalonados"></div>
+      <div class="split-media"><img class="zoomable" src="img/frontal.jpg" alt="Fachada frontal do SKY, com terraços escalonados"></div>
       <div class="stack">
         <span class="eyebrow">Arquitetura autoral</span>
         <h2 style="font-size:clamp(2rem,5vw,3rem)">Uma torre de terraços, verde e luz.</h2>
@@ -316,7 +337,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
           <h2 style="font-size:clamp(2rem,5.5vw,3.2rem)">Residências de alto padrão, do térreo à cobertura.</h2>
           <p class="measure" style="color:var(--muted)">Lojas no térreo com fruição pública, apartamentos de três e quatro suítes, lofts duplex e uma cobertura exclusiva com piscina aquecida. Vagas duplas, bicicletário e hobby box completam a infraestrutura.</p>
         </div>
-        <div class="split-media"><img src="img/embasamento.jpg" alt="Embasamento do SKY, com brises de madeira e paisagismo"></div>
+        <div class="split-media"><img class="zoomable" src="img/embasamento.jpg" alt="Embasamento do SKY, com brises de madeira e paisagismo"></div>
       </div>
       <div class="stats">
         <div class="stat"><span class="n">31</span><span class="l">Pavimentos</span></div>
@@ -335,7 +356,10 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         <h2 style="font-size:clamp(2rem,5.5vw,3.2rem);max-width:18ch">Espaços para viver, receber e relaxar.</h2>
       </div>
       <div class="amen">
-        <figure class="amen-fig"><img src="img/lazer.jpg" alt="Planta do pavimento de lazer do SKY"></figure>
+        <figure class="amen-fig">
+          <span class="zoom-badge"><svg viewBox="0 0 24 24" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg> Ampliar</span>
+          <img class="zoomable" src="img/lazer.jpg" alt="Planta do pavimento de lazer do SKY">
+        </figure>
         <div>
           <div class="amen-list">
             <span class="amen-sub">Pavimento de lazer</span>
@@ -375,7 +399,10 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         <div class="plan"><span class="pt">Cobertura</span><span class="pa">até 278 m² · duplex</span><span class="pm">Quatro suítes, piscina aquecida e duas vagas duplas.</span></div>
       </div>
       <div class="feature">
-        <figure class="feature-fig"><img src="img/cobertura.jpg" alt="Planta da cobertura do SKY, com piscina aquecida, fitness e sauna"></figure>
+        <figure class="feature-fig">
+          <span class="zoom-badge"><svg viewBox="0 0 24 24" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg> Ampliar</span>
+          <img class="zoomable" src="img/cobertura.jpg" alt="Planta da cobertura do SKY, com piscina aquecida, fitness e sauna">
+        </figure>
         <div class="stack">
           <span class="eyebrow">A cobertura</span>
           <h3 style="font-size:clamp(1.8rem,4.5vw,2.6rem)">O ponto mais alto do SKY.</h3>
@@ -482,6 +509,13 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   <span class="wa-label">Fale no WhatsApp</span>
 </a>
 
+<!-- Lightbox para ampliar imagens (renders e plantas) -->
+<div class="lb" id="lightbox" aria-hidden="true" role="dialog" aria-label="Imagem ampliada">
+  <button class="lb-close" id="lbClose" aria-label="Fechar">&times;</button>
+  <img id="lbImg" src="" alt="">
+  <span class="lb-hint">Toque na imagem para ampliar · ESC para fechar</span>
+</div>
+
 <script>
   // Número de WhatsApp oficial da Norden (landings).
   var WHATS = "5548988408680";
@@ -499,6 +533,30 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   var tb = document.getElementById('topbar');
   var onScroll = function(){ tb.classList.toggle('solid', window.scrollY > 40); };
   onScroll(); window.addEventListener('scroll', onScroll, {passive:true});
+
+  // Lightbox: clique na imagem abre ampliada; clique de novo vê em tamanho real.
+  (function(){
+    var lb = document.getElementById('lightbox');
+    var lbImg = document.getElementById('lbImg');
+    var closeBtn = document.getElementById('lbClose');
+    function open(src, alt){
+      lbImg.src = src; lbImg.alt = alt || ''; lbImg.classList.remove('zoom');
+      lb.classList.add('open'); lb.setAttribute('aria-hidden','false');
+      document.body.style.overflow = 'hidden';
+    }
+    function close(){
+      lb.classList.remove('open'); lb.setAttribute('aria-hidden','true');
+      document.body.style.overflow = ''; lbImg.src = '';
+    }
+    document.querySelectorAll('.zoomable').forEach(function(img){
+      img.addEventListener('click', function(){ open(img.currentSrc || img.src, img.alt); });
+    });
+    // clicar na imagem ampliada alterna tamanho real (com rolagem); no fundo, fecha
+    lbImg.addEventListener('click', function(e){ e.stopPropagation(); lbImg.classList.toggle('zoom'); lb.scrollTo(0,0); });
+    closeBtn.addEventListener('click', close);
+    lb.addEventListener('click', function(e){ if(e.target === lb) close(); });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && lb.classList.contains('open')) close(); });
+  })();
 </script>
 </body>
 </html>
