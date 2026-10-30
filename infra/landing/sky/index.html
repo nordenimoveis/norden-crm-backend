@@ -230,6 +230,21 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
     padding:.4rem .65rem;border-radius:999px;background:rgba(18,20,24,.74);color:var(--fg);
     font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;pointer-events:none}
   .zoom-badge svg{width:13px;height:13px;stroke:currentColor;fill:none}
+
+  /* ---- Vídeo (facade do YouTube: só carrega o player ao clicar) ---- */
+  .video-wrap{position:relative;margin-top:2.4rem;border-radius:4px;overflow:hidden;background:#000;aspect-ratio:16/9}
+  .video-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .video-facade{position:absolute;inset:0;cursor:pointer;border:0;padding:0;margin:0;width:100%;height:100%;display:block;background:#000}
+  .video-facade img{width:100%;height:100%;object-fit:cover}
+  .video-facade::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(10,12,16,.55),rgba(10,12,16,.12) 55%,rgba(10,12,16,.2))}
+  .video-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;
+    width:clamp(62px,9vw,86px);height:clamp(62px,9vw,86px);border-radius:50%;background:rgba(196,165,105,.92);
+    display:grid;place-items:center;transition:transform .2s,background .2s;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+  .video-facade:hover .video-play,.video-facade:focus-visible .video-play{transform:translate(-50%,-50%) scale(1.07);background:var(--brass)}
+  .video-play svg{width:36%;height:36%;margin-left:9%;fill:#17140c}
+  .video-cap{position:absolute;left:0;bottom:0;z-index:2;padding:1rem 1.3rem;color:#fff;
+    font-family:var(--f-display);font-size:clamp(1.05rem,2.6vw,1.3rem);text-shadow:0 1px 10px rgba(0,0,0,.55)}
+  .video-cap small{display:block;font-family:var(--f-body);font-weight:400;font-size:.64rem;letter-spacing:.2em;text-transform:uppercase;color:var(--brass-soft);margin-bottom:.15rem}
 </style>
 
 <!-- Medição 100% pelo Google Tag Manager (GTM-NJSG86T).
@@ -312,6 +327,25 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         <span class="tag on-dark">Mobilidade</span>
         <span class="tag on-dark">Serviços e gastronomia</span>
         <span class="tag on-dark">Valorização</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- VÍDEO: o lugar e a vista -->
+  <section id="video">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">O lugar e a vista</span>
+        <h2 style="font-size:clamp(2rem,5.5vw,3.2rem);max-width:20ch">A vista de quem vive no alto.</h2>
+        <p class="measure" style="color:var(--muted)">Um panorama do entorno, na Agronômica, e da vista que os pavimentos mais altos do SKY terão — da baía ao horizonte de Florianópolis.</p>
+      </div>
+      <div class="video-wrap">
+        <button class="video-facade" id="skyVideo" type="button" aria-label="Reproduzir o vídeo do local e da vista do SKY">
+          <img src="https://i.ytimg.com/vi/SXnSKs-olcA/maxresdefault.jpg" alt="Vista do entorno do SKY, na Agronômica" loading="lazy"
+               onerror="this.onerror=null;this.src='https://i.ytimg.com/vi/SXnSKs-olcA/hqdefault.jpg'">
+          <span class="video-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span>
+          <span class="video-cap"><small>Vídeo</small>O local e a vista do alto</span>
+        </button>
       </div>
     </div>
   </section>
@@ -556,6 +590,23 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
     closeBtn.addEventListener('click', close);
     lb.addEventListener('click', function(e){ if(e.target === lb) close(); });
     document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && lb.classList.contains('open')) close(); });
+  })();
+
+  // Vídeo: carrega o player do YouTube só ao clicar (mantém a página leve).
+  (function(){
+    var vf = document.getElementById('skyVideo');
+    if(!vf) return;
+    vf.addEventListener('click', function(){
+      var wrap = vf.parentNode;
+      var ifr = document.createElement('iframe');
+      ifr.src = 'https://www.youtube-nocookie.com/embed/SXnSKs-olcA?autoplay=1&rel=0&modestbranding=1&playsinline=1';
+      ifr.title = 'Vídeo do SKY — o local e a vista';
+      ifr.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+      ifr.setAttribute('allowfullscreen','');
+      wrap.innerHTML = '';
+      wrap.appendChild(ifr);
+      try{ window.dataLayer.push({ event: 'video_play', item: 'SKY Agronômica' }); }catch(e){}
+    });
   })();
 </script>
 </body>
