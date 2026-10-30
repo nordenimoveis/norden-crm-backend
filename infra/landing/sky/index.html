@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SKY Agronômica</title>
+<meta name="description" content="SKY — residências no alto da Agronômica, em Florianópolis. Entre a cidade e o céu, com vistas para a baía.">
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-NJSG86T');</script>
+<!-- End Google Tag Manager -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Inter:wght@300;400;500;600&display=swap">
+<style>
+  /* Visual de marca único (não reage a tema claro/escuro) — real estate de alto padrão.
+     Bandas escuras cinematográficas alternadas com bandas claras "areia". */
+  :root{
+    --ink:#121418;          /* carvão azulado (fundo marca — céu/noite) */
+    --ink-2:#181B20;        /* bloco escuro alterno */
+    --sand:#F2EFE9;         /* claro (banda clara) */
+    --sand-2:#E7E2D8;
+    --fg:#EFF1F4;           /* texto sobre escuro */
+    --fg-ink:#23262B;       /* texto sobre claro */
+    --muted:#99A0AB;        /* texto secundário frio */
+    --muted-ink:#636873;
+    --brass:#C4A569;        /* latão/dourado (acento, do entardecer) */
+    --brass-soft:#D8C39A;
+    --line:rgba(196,165,105,.28);
+    --line-ink:rgba(35,38,43,.14);
+    color-scheme: dark;
+    --maxw:1180px;
+    --gutter:clamp(1rem,5vw,3.5rem);
+    --f-display:"Cormorant Garamond", Georgia, "Times New Roman", serif;
+    --f-body:"Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--ink);color:var(--fg);font-family:var(--f-body);font-weight:300;line-height:1.65;-webkit-font-smoothing:antialiased}
+  img{display:block;max-width:100%}
+  h1,h2,h3{font-family:var(--f-display);font-weight:400;text-wrap:balance;margin:0;letter-spacing:.01em}
+  p{margin:0}
+  a{color:inherit}
+  .eyebrow{font-family:var(--f-body);font-weight:500;font-size:.72rem;letter-spacing:.32em;text-transform:uppercase;color:var(--brass)}
+  .wrap{max-width:var(--maxw);margin-inline:auto;padding-inline:var(--gutter)}
+
+  /* ---- Top bar ---- */
+  .topbar{position:fixed;inset-inline:0;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;
+    gap:1rem;padding:.9rem var(--gutter);padding-top:calc(.9rem + env(safe-area-inset-top,0px));
+    background:linear-gradient(to bottom,rgba(8,10,14,.72),rgba(8,10,14,0));transition:background .3s}
+  .topbar.solid{background:rgba(18,20,24,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .brandmark{display:flex;align-items:center;gap:.6rem;line-height:1}
+  .brandmark svg{width:30px;height:auto;color:var(--brass)}
+  .brandmark b{font-family:var(--f-display);font-weight:500;font-size:1.3rem;letter-spacing:.46em;padding-left:.46em}
+  .btn{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--f-body);font-weight:500;font-size:.82rem;
+    letter-spacing:.06em;text-decoration:none;padding:.7rem 1.25rem;border-radius:2px;transition:all .25s;cursor:pointer;border:1px solid transparent}
+  .btn-brass{background:var(--brass);color:#17140c}
+  .btn-brass:hover{background:var(--brass-soft)}
+  .btn-ghost{border-color:var(--line);color:var(--fg)}
+  .btn-ghost:hover{border-color:var(--brass);color:var(--brass-soft)}
+  .topbar .btn{padding:.6rem 1.05rem}
+  @media(max-width:620px){.topbar .btn-label-long{display:none}}
+
+  /* ---- Hero ---- */
+  .hero{position:relative;min-height:92vh;display:flex;align-items:flex-end;overflow:hidden}
+  .hero-img{position:absolute;inset:0}
+  .hero-img img{width:100%;height:100%;object-fit:cover;object-position:center}
+  .hero-img::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(to top,rgba(10,12,16,.88) 2%,rgba(10,12,16,.26) 44%,rgba(10,12,16,.42) 100%)}
+  .hero-inner{position:relative;z-index:2;padding-block:clamp(2.5rem,7vh,6rem);width:100%}
+  .hero .mark{color:var(--brass);width:clamp(46px,8vw,70px);height:auto;margin-bottom:1.2rem}
+  .hero h1{font-size:clamp(3.6rem,14vw,9rem);font-weight:300;letter-spacing:.18em;line-height:.9;padding-left:.18em}
+  .hero .tagline{font-family:var(--f-display);font-style:italic;font-weight:300;font-size:clamp(1.3rem,3.6vw,2.1rem);color:var(--brass-soft);margin-top:.9rem}
+  .hero .sub{max-width:38ch;color:var(--fg);opacity:.9;margin-top:1.1rem;font-size:clamp(.98rem,2.4vw,1.1rem)}
+  .hero .meta{display:flex;align-items:center;flex-wrap:wrap;gap:.7rem;margin-top:1.4rem;color:var(--muted);font-size:.85rem;letter-spacing:.14em;text-transform:uppercase}
+  .hero .meta .dot{width:4px;height:4px;border-radius:50%;background:var(--brass)}
+  .hero .cta-row{display:flex;flex-wrap:wrap;gap:.8rem;margin-top:2rem}
+
+  /* ---- Section rhythm ---- */
+  section{padding-block:clamp(3.5rem,9vw,7rem)}
+  .band-light{background:var(--sand);color:var(--fg-ink)}
+  .band-light .eyebrow{color:#9a7b33}
+  .band-ink2{background:var(--ink-2)}
+  .lede{font-family:var(--f-display);font-weight:300;font-size:clamp(1.6rem,4.5vw,2.9rem);line-height:1.22;max-width:20ch}
+  .measure{max-width:60ch}
+  .stack{display:flex;flex-direction:column;gap:1.1rem}
+  .section-head{display:flex;flex-direction:column;gap:.9rem;margin-bottom:2.4rem}
+
+  /* manifesto */
+  .manifesto{display:grid;grid-template-columns:1fr;gap:1.6rem;align-items:start}
+  @media(min-width:800px){.manifesto{grid-template-columns:1.1fr .9fr;gap:clamp(2rem,6vw,5rem);align-items:center}}
+
+  /* tags */
+  .tags{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1.8rem}
+  .tag{border:1px solid var(--line-ink);color:var(--muted-ink);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;
+    padding:.5rem .95rem;border-radius:2px}
+  .band-ink2 .tag,.tag.on-dark{border-color:var(--line);color:var(--muted)}
+
+  /* split (arquitetura / edifício) */
+  .split{display:grid;grid-template-columns:1fr;gap:1.6rem;align-items:center}
+  @media(min-width:860px){.split{grid-template-columns:1fr 1fr;gap:clamp(2rem,6vw,4.5rem)}
+    .split.rev .split-media{order:2}}
+  .split-media{border-radius:3px;overflow:hidden;background:#000}
+  .split-media img{width:100%;height:100%;object-fit:cover;aspect-ratio:4/5}
+  @media(min-width:860px){.split-media img{aspect-ratio:5/6;max-height:660px}}
+
+  /* números do edifício */
+  .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:3px;overflow:hidden;margin-top:2.2rem}
+  @media(min-width:760px){.stats{grid-template-columns:repeat(4,1fr)}}
+  .stat{background:var(--ink);padding:1.6rem 1.2rem;text-align:center;display:flex;flex-direction:column;gap:.35rem}
+  .band-ink2 .stat{background:var(--ink-2)}
+  .stat .n{font-family:var(--f-display);font-size:clamp(2rem,5.5vw,3rem);font-weight:300;color:var(--brass-soft);line-height:1;font-variant-numeric:tabular-nums}
+  .stat .l{font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+  /* lazer (planta + lista) */
+  .amen{display:grid;grid-template-columns:1fr;gap:clamp(1.6rem,5vw,3.5rem);align-items:center}
+  @media(min-width:860px){.amen{grid-template-columns:.9fr 1.1fr}}
+  .amen-fig{margin:0;background:#fff;border:1px solid var(--line-ink);border-radius:3px;padding:clamp(1rem,3vw,1.6rem)}
+  .amen-fig img{width:100%;height:auto;object-fit:contain}
+  .amen-list{display:grid;grid-template-columns:1fr 1fr;gap:.9rem 1.4rem}
+  @media(max-width:460px){.amen-list{grid-template-columns:1fr}}
+  .amen-list div{display:flex;align-items:baseline;gap:.6rem;font-size:1rem;color:var(--fg-ink)}
+  .band-ink2 .amen-list div{color:var(--fg)}
+  .amen-list .mk{color:var(--brass);font-family:var(--f-display);font-size:1.1rem;line-height:1}
+  .amen-sub{font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:#9a7b33;margin:1.6rem 0 .4rem;grid-column:1/-1}
+  .band-ink2 .amen-sub{color:var(--brass)}
+
+  /* tipologias */
+  .plan-grid{display:grid;grid-template-columns:1fr;gap:1.4rem;margin-top:2.2rem}
+  @media(min-width:680px){.plan-grid{grid-template-columns:repeat(2,1fr)}}
+  @media(min-width:960px){.plan-grid{grid-template-columns:repeat(4,1fr)}}
+  .plan{border:1px solid var(--line);border-radius:3px;padding:1.5rem 1.4rem 1.6rem;background:var(--ink-2);display:flex;flex-direction:column;gap:.5rem}
+  .plan .pt{font-family:var(--f-display);font-size:1.5rem;color:var(--fg)}
+  .plan .pa{color:var(--brass-soft);font-size:.92rem;font-weight:400}
+  .plan .pm{color:var(--muted);font-size:.86rem;line-height:1.6;margin-top:.2rem}
+  .type-row{display:flex;flex-wrap:wrap;gap:.5rem 1.6rem;margin-top:2rem;color:var(--muted);font-size:.9rem}
+  .type-row b{color:var(--fg);font-weight:500}
+
+  /* cobertura destaque */
+  .feature{display:grid;grid-template-columns:1fr;gap:clamp(1.6rem,5vw,3rem);align-items:center;margin-top:clamp(2.4rem,6vw,3.6rem)}
+  @media(min-width:860px){.feature{grid-template-columns:1fr 1fr}}
+  .feature-fig{margin:0;background:#fff;border:1px solid var(--line);border-radius:3px;padding:clamp(1rem,3vw,1.6rem)}
+  .feature-fig img{width:100%;height:auto;max-height:560px;object-fit:contain}
+
+  /* modelo cotas */
+  .model{display:grid;grid-template-columns:1fr;gap:1.4rem}
+  @media(min-width:820px){.model{grid-template-columns:1.05fr .95fr;gap:clamp(2rem,6vw,4rem);align-items:center}}
+  .model-points{display:flex;flex-direction:column;gap:1.1rem;margin-top:1.4rem}
+  .mp{display:grid;grid-template-columns:auto 1fr;gap:.9rem;align-items:start}
+  .mp .mk{font-family:var(--f-display);color:var(--brass);font-size:1.4rem;line-height:1.2;min-width:1.4rem}
+  .price-card{border:1px solid var(--line);border-radius:3px;padding:clamp(1.6rem,4vw,2.4rem);background:var(--ink-2);text-align:center}
+  .price-card .k{font-size:.74rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  .price-card .v{font-family:var(--f-display);font-size:clamp(2rem,6.5vw,3rem);color:var(--brass-soft);line-height:1.05;margin:.4rem 0 .2rem}
+  .price-card .v2{font-family:var(--f-display);font-size:1.25rem;color:var(--fg);margin-top:.6rem}
+  .price-card .f{color:var(--muted);font-size:.82rem;max-width:36ch;margin-inline:auto;margin-top:.5rem}
+
+  /* composição do fluxo */
+  .flow{margin-top:clamp(2rem,5vw,3rem);border-top:1px solid var(--line-ink);padding-top:clamp(1.6rem,4vw,2.4rem)}
+  .flow .fh{font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:#9a7b33;margin-bottom:1.3rem}
+  .flow-steps{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line-ink);border:1px solid var(--line-ink);border-radius:3px;overflow:hidden}
+  @media(min-width:760px){.flow-steps{grid-template-columns:repeat(4,1fr)}}
+  .fstep{background:var(--sand);padding:clamp(1.2rem,3vw,1.6rem) 1.1rem;display:flex;flex-direction:column;gap:.3rem}
+  .fstep .fn{font-family:var(--f-display);font-size:clamp(1.8rem,5vw,2.4rem);color:var(--fg-ink);line-height:1;font-variant-numeric:tabular-nums}
+  .fstep .fl{font-size:.82rem;color:var(--muted-ink);letter-spacing:.03em}
+  .flow .fnote{color:var(--muted-ink);font-size:.82rem;margin-top:1.1rem;max-width:74ch;line-height:1.7}
+
+  /* CTA final */
+  .cta{position:relative;overflow:hidden;text-align:center}
+  .cta-bg{position:absolute;inset:0;z-index:0}
+  .cta-bg img{width:100%;height:100%;object-fit:cover}
+  .cta-bg::after{content:"";position:absolute;inset:0;background:linear-gradient(rgba(10,12,16,.82),rgba(10,12,16,.9))}
+  .cta .wrap{position:relative;z-index:2}
+  .cta h2{font-size:clamp(2.2rem,6vw,3.6rem);font-weight:300}
+  .cta .phone{display:inline-block;margin-top:.4rem;font-family:var(--f-display);font-size:clamp(1.4rem,4vw,2rem);color:var(--brass-soft);letter-spacing:.04em}
+  .cta .cta-row{display:flex;flex-wrap:wrap;gap:.8rem;justify-content:center;margin-top:1.8rem}
+  .cta .note{color:var(--muted);font-size:.82rem;margin-top:1.3rem}
+
+  /* footer */
+  footer{background:#0D0F12;color:var(--muted);padding-block:clamp(2.5rem,6vw,4rem);font-size:.86rem}
+  .foot-grid{display:grid;grid-template-columns:1fr;gap:1.8rem}
+  @media(min-width:760px){.foot-grid{grid-template-columns:1.3fr 1fr 1fr}}
+  footer .brandmark b{color:var(--fg)}
+  footer h4{font-family:var(--f-body);font-weight:600;font-size:.74rem;letter-spacing:.18em;text-transform:uppercase;color:var(--brass);margin:0 0 .7rem}
+  footer a{color:var(--muted);text-decoration:none}footer a:hover{color:var(--brass-soft)}
+  .disclaimer{border-top:1px solid rgba(255,255,255,.08);margin-top:2.2rem;padding-top:1.4rem;font-size:.74rem;line-height:1.7;color:#636873}
+
+  /* Norden */
+  .byline{font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .byline b{color:var(--brass-soft);font-weight:500}
+  @media(max-width:760px){.byline{display:none}}
+  .topbar-right{display:flex;align-items:center;gap:1.1rem}
+  .social{display:flex;gap:.55rem;flex-wrap:wrap}
+  .social a{display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--line);border-radius:50%;color:var(--muted);transition:all .2s;text-decoration:none}
+  .social a:hover{border-color:var(--brass);color:var(--brass-soft)}
+  .social svg{width:18px;height:18px}
+  .norden-foot{display:flex;flex-direction:column;gap:.5rem}
+  .norden-foot .handle{color:var(--fg)}
+
+  /* botão flutuante WhatsApp */
+  .wa-float{position:fixed;right:clamp(1rem,4vw,1.6rem);z-index:60;
+    bottom:calc(clamp(1rem,4vw,1.6rem) + env(safe-area-inset-bottom,0px));
+    display:inline-flex;align-items:center;gap:.55rem;height:56px;padding:0 18px;border-radius:999px;
+    background:#25D366;color:#fff;text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,.30);
+    font-family:var(--f-body);font-weight:600;font-size:.92rem;transition:transform .2s,box-shadow .2s}
+  .wa-float:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(0,0,0,.36)}
+  .wa-float svg{width:27px;height:27px;flex:none}
+  @media(max-width:620px){.wa-float{padding:0;width:56px;justify-content:center}.wa-float .wa-label{display:none}}
+  @media(prefers-reduced-motion:no-preference){.wa-float{animation:waIn .4s ease .8s both}}
+  @keyframes waIn{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:none}}
+</style>
+
+<!-- Medição 100% pelo Google Tag Manager (GTM-NJSG86T).
+     O clique no WhatsApp empurra o evento "contato_whatsapp" no dataLayer. -->
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function trackWhats(){
+    try{ window.dataLayer.push({ event: 'contato_whatsapp', item: 'SKY Agronômica' }); }catch(e){}
+  }
+</script>
+</head>
+<body>
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NJSG86T" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+
+<!-- SKY mark: skyline mínimo (reutilizável) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="skymark" viewBox="0 0 48 34">
+  <rect x="11" y="15" width="3" height="19" rx="1.5" fill="currentColor"/>
+  <rect x="18.5" y="7" width="3" height="27" rx="1.5" fill="currentColor"/>
+  <rect x="26" y="19" width="3" height="15" rx="1.5" fill="currentColor"/>
+  <rect x="33.5" y="12" width="3" height="22" rx="1.5" fill="currentColor"/>
+</symbol></svg>
+
+<header class="topbar" id="topbar">
+  <a class="brandmark" href="#top" aria-label="SKY">
+    <svg viewBox="0 0 48 34" aria-hidden="true"><use href="#skymark"/></svg>
+    <b>SKY</b>
+  </a>
+  <div class="topbar-right">
+    <span class="byline">Comercialização exclusiva · <b>Norden Imóveis</b></span>
+    <a class="btn btn-brass" href="#contato" data-wa>Falar com especialista</a>
+  </div>
+</header>
+
+<main id="top">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-img"><img src="img/aerea.jpg" alt="Torre SKY ao entardecer, sobre Florianópolis" fetchpriority="high"></div>
+    <div class="hero-inner wrap">
+      <svg class="mark" viewBox="0 0 48 34" aria-hidden="true"><use href="#skymark"/></svg>
+      <h1>SKY</h1>
+      <p class="tagline">Entre a cidade e o céu.</p>
+      <p class="sub">Residências no alto da Agronômica, com vistas que alcançam a baía, a cidade e o horizonte de Florianópolis.</p>
+      <div class="meta"><span>Agronômica</span><span class="dot"></span><span>Florianópolis</span><span class="dot"></span><span>Norden Imóveis</span></div>
+      <div class="cta-row">
+        <a class="btn btn-brass" href="#contato" data-wa>Agendar apresentação</a>
+        <a class="btn btn-ghost" href="#empreendimento">Conhecer o empreendimento</a>
+      </div>
+      <p style="margin-top:1.3rem;font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)">Comercialização exclusiva · <span style="color:var(--brass-soft)">Norden Imóveis</span></p>
+    </div>
+  </section>
+
+  <!-- MANIFESTO -->
+  <section class="band-light" id="empreendimento">
+    <div class="wrap manifesto">
+      <div class="stack">
+        <span class="eyebrow">Viver no alto</span>
+        <h2 class="lede">Uma nova altura para morar em Florianópolis.</h2>
+      </div>
+      <div class="stack measure">
+        <p>O SKY nasce no coração da Agronômica — a poucos minutos da Beira-Mar Norte, do centro e da ponte — e se eleva para oferecer o que a cidade tem de mais raro: a vista. Luz natural, amplitude e o horizonte da baía como paisagem diária.</p>
+        <p>Cada pavimento foi pensado para unir privacidade, fluidez entre os ambientes e varandas generosas, num edifício que traduz sofisticação em cada detalhe — da chegada à cobertura.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOCALIZAÇÃO -->
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Agronômica · Florianópolis</span>
+        <h2 style="font-size:clamp(2rem,5.5vw,3.2rem);max-width:20ch">Um endereço central, conectado e valorizado.</h2>
+        <p class="measure" style="color:var(--muted)">Na Rua Joaquim Costa, o SKY está a passos da Beira-Mar Norte e do centro, numa das regiões mais bem localizadas da cidade — perto de tudo, com a tranquilidade de uma rua residencial.</p>
+      </div>
+      <div class="tags">
+        <span class="tag on-dark">Beira-Mar Norte</span>
+        <span class="tag on-dark">Centro</span>
+        <span class="tag on-dark">Baía Norte</span>
+        <span class="tag on-dark">Mobilidade</span>
+        <span class="tag on-dark">Serviços e gastronomia</span>
+        <span class="tag on-dark">Valorização</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARQUITETURA -->
+  <section class="band-ink2">
+    <div class="wrap split">
+      <div class="split-media"><img src="img/frontal.jpg" alt="Fachada frontal do SKY, com terraços escalonados"></div>
+      <div class="stack">
+        <span class="eyebrow">Arquitetura autoral</span>
+        <h2 style="font-size:clamp(2rem,5vw,3rem)">Uma torre de terraços, verde e luz.</h2>
+        <p class="measure" style="color:var(--muted)">Assinada pela AF Arquitetura, a fachada do SKY se compõe de terraços escalonados e jardins suspensos que acompanham a verticalidade do edifício. Linhas contemporâneas, brises de madeira e varandas amplas criam uma presença elegante na paisagem — e enquadram a vista a cada andar.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- O EDIFÍCIO (números) -->
+  <section>
+    <div class="wrap">
+      <div class="split">
+        <div class="stack">
+          <span class="eyebrow">O edifício</span>
+          <h2 style="font-size:clamp(2rem,5.5vw,3.2rem)">Residências de alto padrão, do térreo à cobertura.</h2>
+          <p class="measure" style="color:var(--muted)">Lojas no térreo com fruição pública, apartamentos de três e quatro suítes, lofts duplex e uma cobertura exclusiva com piscina aquecida. Vagas duplas, bicicletário e hobby box completam a infraestrutura.</p>
+        </div>
+        <div class="split-media"><img src="img/embasamento.jpg" alt="Embasamento do SKY, com brises de madeira e paisagismo"></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><span class="n">31</span><span class="l">Pavimentos</span></div>
+        <div class="stat"><span class="n">03 · 04</span><span class="l">Suítes por residência</span></div>
+        <div class="stat"><span class="n">180–278</span><span class="l">m² privativos</span></div>
+        <div class="stat"><span class="n">01</span><span class="l">Cobertura exclusiva</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LAZER -->
+  <section class="band-light" id="lazer">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Lazer &amp; convívio</span>
+        <h2 style="font-size:clamp(2rem,5.5vw,3.2rem);max-width:18ch">Espaços para viver, receber e relaxar.</h2>
+      </div>
+      <div class="amen">
+        <figure class="amen-fig"><img src="img/lazer.jpg" alt="Planta do pavimento de lazer do SKY"></figure>
+        <div>
+          <div class="amen-list">
+            <span class="amen-sub">Pavimento de lazer</span>
+            <div><span class="mk">—</span> Piscina externa</div>
+            <div><span class="mk">—</span> Espaço gourmet</div>
+            <div><span class="mk">—</span> Salão de festas</div>
+            <div><span class="mk">—</span> Salão de jogos</div>
+            <div><span class="mk">—</span> Espaço kids</div>
+            <span class="amen-sub">Cobertura</span>
+            <div><span class="mk">—</span> Piscina aquecida</div>
+            <div><span class="mk">—</span> Fitness</div>
+            <div><span class="mk">—</span> Sauna</div>
+            <div><span class="mk">—</span> Sala de massagem</div>
+            <span class="amen-sub">Infraestrutura</span>
+            <div><span class="mk">—</span> Fruição pública</div>
+            <div><span class="mk">—</span> Vagas duplas</div>
+            <div><span class="mk">—</span> Bicicletário</div>
+            <div><span class="mk">—</span> Hobby box</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TIPOLOGIAS -->
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Plantas &amp; tipologias</span>
+        <h2 style="font-size:clamp(2rem,5.5vw,3.2rem);max-width:22ch">Plantas amplas, pensadas para o alto padrão.</h2>
+        <p class="measure" style="color:var(--muted)">Áreas privativas de 180 a 278 m², com três ou quatro suítes, lofts duplex e a cobertura exclusiva.</p>
+      </div>
+      <div class="plan-grid">
+        <div class="plan"><span class="pt">Lojas</span><span class="pa">148 m² · térreo</span><span class="pm">Unidades comerciais no térreo, com fruição pública.</span></div>
+        <div class="plan"><span class="pt">03 suítes</span><span class="pa">180 a 200 m² privativos</span><span class="pm">Três suítes, varanda ampla e vaga dupla.</span></div>
+        <div class="plan"><span class="pt">04 suítes</span><span class="pa">230 m² privativos</span><span class="pm">Quatro suítes, living integrado e vaga dupla.</span></div>
+        <div class="plan"><span class="pt">Cobertura</span><span class="pa">até 278 m² · duplex</span><span class="pm">Quatro suítes, piscina aquecida e duas vagas duplas.</span></div>
+      </div>
+      <div class="feature">
+        <figure class="feature-fig"><img src="img/cobertura.jpg" alt="Planta da cobertura do SKY, com piscina aquecida, fitness e sauna"></figure>
+        <div class="stack">
+          <span class="eyebrow">A cobertura</span>
+          <h3 style="font-size:clamp(1.8rem,4.5vw,2.6rem)">O ponto mais alto do SKY.</h3>
+          <p class="measure" style="color:var(--muted)">No topo do edifício, a cobertura reúne piscina aquecida, fitness, sauna e sala de massagem — um andar inteiro dedicado ao bem-estar, com a melhor vista da torre.</p>
+        </div>
+      </div>
+      <div class="type-row">
+        <span><b>Vagas</b> duplas para as residências</span>
+        <span><b>Hobby box</b> na infraestrutura</span>
+        <span><b>Bicicletário</b> residencial e visitantes</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODELO / COTAS -->
+  <section class="band-light">
+    <div class="wrap">
+      <div class="model">
+        <div class="stack">
+          <span class="eyebrow">Modelo de aquisição</span>
+          <h2 style="font-size:clamp(2rem,5vw,2.8rem);max-width:18ch;color:var(--fg-ink)">Alto padrão a preço de custo, no modelo de cotas.</h2>
+          <div class="model-points">
+            <div class="mp"><span class="mk">01</span><p>Empreendimento estruturado em regime de <b style="color:var(--fg-ink)">administração a preço de custo</b>, por meio de SPE — Sociedade de Propósito Específico.</p></div>
+            <div class="mp"><span class="mk">02</span><p>Cada <b style="color:var(--fg-ink)">cota</b> representa os direitos de uma unidade, com participação societária proporcional à área adquirida.</p></div>
+            <div class="mp"><span class="mk">03</span><p>Investimento <b style="color:var(--fg-ink)">diluído ao longo da obra</b>, com parcelas reajustadas pelo CUB/m² médio residencial.</p></div>
+          </div>
+        </div>
+        <div class="price-card">
+          <span class="k">Apartamentos a partir de</span>
+          <div class="v">R$ 3,1 milhões</div>
+          <div class="v2">Lojas a partir de R$ 740 mil</div>
+          <p class="f">Valores no modelo a preço de custo. Tabela completa de unidades e condições disponíveis sob consulta.</p>
+          <a class="btn btn-brass" href="#contato" data-wa style="margin-top:1.3rem">Receber a tabela completa</a>
+        </div>
+      </div>
+      <div class="flow">
+        <div class="fh">Como se compõe o investimento</div>
+        <div class="flow-steps">
+          <div class="fstep"><span class="fn">Aporte</span><span class="fl">inicial · em até 8×</span></div>
+          <div class="fstep"><span class="fn">57×</span><span class="fl">parcelas mensais</span></div>
+          <div class="fstep"><span class="fn">9×</span><span class="fl">reforços semestrais</span></div>
+          <div class="fstep"><span class="fn">CUB</span><span class="fl">reajuste mensal</span></div>
+        </div>
+        <p class="fnote">No modelo a preço de custo (SPE), o investimento é diluído ao longo da obra — um aporte inicial (em até 8×), parcelas mensais e reforços semestrais, com reajuste pelo CUB/m² médio residencial. A composição detalhada e os valores por unidade são apresentados por um especialista da Norden.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta" id="contato">
+    <div class="cta-bg"><img src="img/aerea.jpg" alt=""></div>
+    <div class="wrap">
+      <span class="eyebrow">Atendimento Norden</span>
+      <h2 style="margin-top:.8rem">Agende uma apresentação privativa do SKY.</h2>
+      <p style="color:var(--fg);opacity:.85;max-width:48ch;margin-inline:auto;margin-top:1rem">Conheça as plantas, a cobertura e a tabela de cotas com um especialista da Norden Imóveis. Atendimento consultivo, no seu tempo.</p>
+      <a class="phone" id="phoneText" href="#" data-wa>WhatsApp (48) 0 0000-0000</a>
+      <div class="cta-row">
+        <a class="btn btn-brass" href="#" data-wa>Falar agora no WhatsApp</a>
+        <a class="btn btn-ghost" href="#" data-wa>Receber a tabela e as plantas</a>
+      </div>
+      <div class="social" aria-label="Redes da Norden Imóveis" style="justify-content:center;margin-top:1.4rem">
+        <a href="https://instagram.com/nordenimoveis" target="_blank" rel="noopener" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none"/></svg></a>
+        <a href="https://www.facebook.com/101831059524746" target="_blank" rel="noopener" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 22v-8h2.7l.4-3.1h-3.1V8.9c0-.9.25-1.5 1.55-1.5h1.65V4.6c-.3 0-1.35-.1-2.5-.1-2.45 0-4.1 1.5-4.1 4.2v2.3H8.0V14h2.3v8z"/></svg></a>
+        <a href="#" data-wa aria-label="WhatsApp"><svg viewBox="0 0 32 32" fill="currentColor"><path d="M16 3C9.4 3 4 8.3 4 14.9c0 2.3.7 4.5 1.9 6.4L4 29l7-1.8c1.8 1 3.9 1.5 6 1.5 6.6 0 12-5.3 12-11.9S22.6 3 16 3zm0 21.6c-1.9 0-3.7-.5-5.3-1.5l-.4-.2-4.1 1.1 1.1-4-.2-.4c-1.1-1.7-1.6-3.6-1.6-5.6C5.5 9.3 10.2 4.8 16 4.8s10.5 4.5 10.5 10.1S21.8 24.6 16 24.6zm5.8-7.6c-.3-.2-1.9-.9-2.2-1-.3-.1-.5-.2-.7.2s-.8 1-1 1.2c-.2.2-.4.2-.7.1-.3-.2-1.3-.5-2.5-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.7l.5-.6c.2-.2.2-.3.3-.5.1-.2 0-.4 0-.6l-1-2.3c-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4s-1.1 1-1.1 2.5 1.1 2.9 1.3 3.1c.2.2 2.2 3.3 5.3 4.6.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.9-.8 2.1-1.5.3-.7.3-1.3.2-1.5z"/></svg></a>
+        <a href="https://nordenimoveis.com.br" target="_blank" rel="noopener" aria-label="Site"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18"/></svg></a>
+      </div>
+      <p class="note">Comercialização exclusiva Norden Imóveis · @nordenimoveis · Imagens meramente ilustrativas.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="stack" style="gap:1rem">
+        <span class="brandmark"><svg viewBox="0 0 48 34" aria-hidden="true" style="width:30px;color:var(--brass)"><use href="#skymark"/></svg><b>SKY</b></span>
+        <p style="max-width:34ch">Residências de alto padrão na Agronômica, Florianópolis. Projeto: AF Arquitetura.</p>
+      </div>
+      <div>
+        <h4>Empreendimento</h4>
+        <p>SKY Agronômica<br>Rua Joaquim Costa<br>Agronômica — Florianópolis/SC</p>
+      </div>
+      <div class="norden-foot">
+        <h4>Comercialização exclusiva</h4>
+        <p class="handle" style="font-family:var(--f-display);font-size:1.3rem;color:var(--fg)">Norden Imóveis</p>
+        <p>Imóveis de alto padrão em Florianópolis e região.</p>
+        <p><a href="https://nordenimoveis.com.br" target="_blank" rel="noopener">nordenimoveis.com.br</a><br>
+           <a href="https://instagram.com/nordenimoveis" target="_blank" rel="noopener">@nordenimoveis</a><br>
+           <span style="user-select:all">imoveisnorden@gmail.com</span></p>
+        <div class="social" style="margin-top:.4rem">
+          <a href="https://instagram.com/nordenimoveis" target="_blank" rel="noopener" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none"/></svg></a>
+          <a href="https://www.facebook.com/101831059524746" target="_blank" rel="noopener" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 22v-8h2.7l.4-3.1h-3.1V8.9c0-.9.25-1.5 1.55-1.5h1.65V4.6c-.3 0-1.35-.1-2.5-.1-2.45 0-4.1 1.5-4.1 4.2v2.3H8.0V14h2.3v8z"/></svg></a>
+          <a href="#" data-wa aria-label="WhatsApp"><svg viewBox="0 0 32 32" fill="currentColor"><path d="M16 3C9.4 3 4 8.3 4 14.9c0 2.3.7 4.5 1.9 6.4L4 29l7-1.8c1.8 1 3.9 1.5 6 1.5 6.6 0 12-5.3 12-11.9S22.6 3 16 3zm0 21.6c-1.9 0-3.7-.5-5.3-1.5l-.4-.2-4.1 1.1 1.1-4-.2-.4c-1.1-1.7-1.6-3.6-1.6-5.6C5.5 9.3 10.2 4.8 16 4.8s10.5 4.5 10.5 10.1S21.8 24.6 16 24.6z"/></svg></a>
+        </div>
+      </div>
+    </div>
+    <p class="disclaimer">Material de divulgação referente ao estudo arquitetônico preliminar do empreendimento, contendo imagens digitais, plantas e layouts meramente ilustrativos, sujeitos à modificação conforme análise do projeto pela Prefeitura Municipal de Florianópolis e compatibilização com os projetos de engenharia. Áreas e valores estimados em conformidade com o anteprojeto; parcelas e reforços sujeitos a reajuste pelo CUB/m² médio residencial (Sinduscon Grande Florianópolis). Empreendimento no regime de administração a preço de custo, por meio de SPE — Sociedade de Propósito Específico, formada por cotistas com participação societária proporcional à área adquirida.</p>
+  </div>
+</footer>
+
+<!-- Botão flutuante WhatsApp (acompanha a rolagem) -->
+<a class="wa-float" href="#" data-wa aria-label="Falar no WhatsApp com a Norden">
+  <svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16 3C9.4 3 4 8.3 4 14.9c0 2.3.7 4.5 1.9 6.4L4 29l7-1.8c1.8 1 3.9 1.5 6 1.5 6.6 0 12-5.3 12-11.9S22.6 3 16 3zm0 21.6c-1.9 0-3.7-.5-5.3-1.5l-.4-.2-4.1 1.1 1.1-4-.2-.4c-1.1-1.7-1.6-3.6-1.6-5.6C5.5 9.3 10.2 4.8 16 4.8s10.5 4.5 10.5 10.1S21.8 24.6 16 24.6zm5.8-7.6c-.3-.2-1.9-.9-2.2-1-.3-.1-.5-.2-.7.2s-.8 1-1 1.2c-.2.2-.4.2-.7.1-.3-.2-1.3-.5-2.5-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.7l.5-.6c.2-.2.2-.3.3-.5.1-.2 0-.4 0-.6l-1-2.3c-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4s-1.1 1-1.1 2.5 1.1 2.9 1.3 3.1c.2.2 2.2 3.3 5.3 4.6.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.9-.8 2.1-1.5.3-.7.3-1.3.2-1.5z"/></svg>
+  <span class="wa-label">Fale no WhatsApp</span>
+</a>
+
+<script>
+  // Número de WhatsApp oficial da Norden (landings).
+  var WHATS = "5548988408680";
+  var MSG = encodeURIComponent("Olá! Tenho interesse no SKY (Agronômica) e gostaria de receber a apresentação e a tabela de cotas.");
+  var waHref = "https://wa.me/" + WHATS + "?text=" + MSG;
+  document.querySelectorAll('[data-wa]').forEach(function(a){ a.href = waHref; a.target = "_blank"; a.rel = "noopener"; a.addEventListener('click', trackWhats); });
+  // texto do telefone (formatado a partir do número)
+  try{
+    var d = WHATS.replace(/^55/,'');
+    var tel = "(" + d.slice(0,2) + ") " + d.slice(2,3) + " " + d.slice(3,7) + "-" + d.slice(7);
+    var pt = document.getElementById('phoneText'); if(pt) pt.textContent = "WhatsApp " + tel;
+  }catch(e){}
+
+  // topbar sólida ao rolar
+  var tb = document.getElementById('topbar');
+  var onScroll = function(){ tb.classList.toggle('solid', window.scrollY > 40); };
+  onScroll(); window.addEventListener('scroll', onScroll, {passive:true});
+</script>
+</body>
+</html>

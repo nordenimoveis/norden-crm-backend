@@ -12,9 +12,12 @@ landing/
     index.html      # a landing (um arquivo, CSS inline)
     img/            # renders otimizados
     wave-book.pdf   # material para download
+  sky/
+    index.html      # landing do SKY (Agronômica)
+    img/            # renders + plantas (lazer, cobertura)
 ```
 
-- URL final: `https://materiais.nordenimoveis.com.br/wave`
+- URLs finais: `https://materiais.nordenimoveis.com.br/wave` · `/sky`
 - O Caddy monta esta pasta em `/srv/landing` (ver docker-compose) e serve com
   `file_server`. HTTPS automático.
 
