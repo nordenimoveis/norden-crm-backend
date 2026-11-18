@@ -138,13 +138,17 @@ Os nomes são configuráveis no `.env` (`TEMPLATE_RETOMADA`, `TEMPLATE_RETOMADA_
 Os corpos acima são criados na Meta por um script que lê o próprio `reengage.ts` (nunca saem de sincronia). Dentro do contêiner da API (que já tem `META_WABA_ID`/`META_WABA_TOKEN`):
 
 ```bash
-# criar/enviar para aprovação
+# criar/enviar para aprovação (templates que ainda não existem na Meta)
 docker compose exec crm-api node dist/scripts/criar-templates-retomada.js
+# atualizar o corpo de templates que JÁ existem (edita no lugar + reaprovação)
+docker compose exec crm-api node dist/scripts/atualizar-templates-retomada.js
 # acompanhar o status de aprovação (APPROVED/PENDING/REJECTED)
 docker compose exec crm-api node dist/scripts/checar-templates-retomada.js
 ```
 
 O token precisa da permissão `whatsapp_business_management`. A aprovação é da Meta (minutos a horas).
+
+> **Criar x Atualizar:** se um nome já existe na Meta, o `criar` recusa ("já existe conteúdo"). Para trocar o texto de um template existente use o `atualizar` (edita pelo ID — reaproveita o nome e dispara nova aprovação). **Não** apague para recriar: a Meta bloqueia o nome por ~4 semanas. O `atualizar` só edita quem está em status editável (APPROVED/REJECTED/PAUSED); quem está PENDING é pulado — espere a análise e rode de novo.
 
 ## Se alterar algum texto
 
