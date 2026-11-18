@@ -99,31 +99,52 @@ TEMPLATE_PRODUCT_FALLBACK=os empreendimentos em Jurerê
 
 ## Retomada de contato (fora das 24h)
 
-Quatro templates **extras** (não fazem parte da régua automática) para o corretor **reabrir uma conversa** depois que a janela de 24h fechou — direto do chat, pelo botão **"Retomar contato"**. O corretor escolhe o **tom** e digita o **assunto** (`{{3}}`), que entra na mensagem. Todas as variações: `{{1}}` cliente, `{{2}}` corretor, `{{3}}` assunto. Categoria na Meta: **MARKETING**, idioma **pt_BR**.
+**Cinco** templates **extras** (não fazem parte da régua automática) para o corretor **reabrir uma conversa** depois que a janela de 24h fechou — direto do chat, pelo botão **"Retomar contato"**. O corretor escolhe o **tom** e digita o **assunto** (`{{3}}`), que entra na mensagem. Todas as variações: `{{1}}` cliente, `{{2}}` corretor, `{{3}}` assunto. Categoria na Meta: **MARKETING**, idioma **pt_BR**.
 
-Amostras para a Meta (as 4): `Diana` · `Ana` · `o book do Origem Jurerê`.
+> Dica de redação: **`sobre`** é a única preposição que não gruda no artigo (*sobre o/a/os/as*), então é a mais segura antes do `{{3}}`. Evite `de/em/a` colados ao `{{3}}` (viram do/no/ao e quebram a frase).
+
+Amostras para a Meta (as 4 primeiras): `Mariana` · `Pedro` · `o apartamento na Beira-Mar`. Na **mensagem livre**, o `{{3}}` é uma frase: amostra `Consegui a condição que comentei e lembrei de você.`
 
 ### `norden_retomada` — retomada leve
 ```
-Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Fiquei pensando na nossa conversa sobre {{3}} e queria saber como você está — a ideia seguiu de pé ou surgiu alguma dúvida que eu possa esclarecer com você?
+Olá, {{1}}. Aqui é {{2}}, da Norden Imóveis. Passando para retomar nossa conversa sobre {{3}} e saber como você está nesse momento. Qualquer dúvida, é só me dizer que acompanho com você.
 ```
 
-### `norden_retomada_material` — você já enviou book/tabela
+### `norden_retomada_material` — você já enviou book/tabela/planta
 ```
-Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Sei que a rotina corre, então passo com calma: o material que te enviei sobre {{3}} fez sentido para o que você procura, ou tem algo que eu possa ajustar para ficar mais a sua cara?
+Olá, {{1}}. Aqui é {{2}}, da Norden Imóveis. Sem pressa — sei que a rotina corre. Queria saber se o material que te enviei sobre {{3}} fez sentido, ou se tem algo que eu possa ajustar para ficar mais a sua cara.
 ```
 
-### `norden_retomada_novidade` — tem algo novo para mostrar
+### `norden_retomada_novidade` — surgiu algo novo (sem compromisso)
 ```
-Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Lembrei de você: surgiu uma novidade sobre {{3}} que tem tudo a ver com o que você me contou. Posso te mostrar para a gente ver juntos se encaixa?
+Olá, {{1}}. Aqui é {{2}}, da Norden Imóveis. Lembrei de você: surgiu algo novo que pode ter a ver com {{3}}. Se achar que vale, te mostro sem compromisso para vermos juntos.
 ```
 
 ### `norden_retomada_despedida` — último toque, respeitoso
 ```
-Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Respeito total o seu tempo e não quero insistir — só queria saber se {{3}} ainda está nos seus planos ou se prefere retomar mais para frente. Como fica melhor para você?
+Olá, {{1}}. Aqui é {{2}}, da Norden Imóveis. Respeito totalmente o seu tempo e não quero insistir. Só queria entender se {{3}} ainda faz parte dos seus planos, ou se prefere retomar mais adiante. Como for melhor para você, eu acompanho.
 ```
 
-Os nomes são configuráveis no `.env` (`TEMPLATE_RETOMADA`, `TEMPLATE_RETOMADA_MATERIAL`, `TEMPLATE_RETOMADA_NOVIDADE`, `TEMPLATE_RETOMADA_DESPEDIDA`). O texto que aparece no painel/histórico vem de `crm-api/src/services/reengage.ts` — mantenha igual ao aprovado na Meta.
+### `norden_retomada_livre` — mensagem livre (o `{{3}}` é a frase inteira)
+```
+Olá, {{1}}. Aqui é {{2}}, da Norden Imóveis. {{3}} Fico à disposição para seguirmos quando for melhor para você.
+```
+O corretor escreve o miolo inteiro no `{{3}}` (até ~300 caracteres), colado ao que estava sendo tratado. Ex.: *"Consegui a condição especial que comentei no apê da Beira-Mar e lembrei de você."*
+
+Os nomes são configuráveis no `.env` (`TEMPLATE_RETOMADA`, `TEMPLATE_RETOMADA_MATERIAL`, `TEMPLATE_RETOMADA_NOVIDADE`, `TEMPLATE_RETOMADA_DESPEDIDA`, `TEMPLATE_RETOMADA_LIVRE`). O texto que aparece no painel/histórico vem de `crm-api/src/services/reengage.ts` — mantenha igual ao aprovado na Meta.
+
+### Criar/aprovar na Meta (via Graph API)
+
+Os corpos acima são criados na Meta por um script que lê o próprio `reengage.ts` (nunca saem de sincronia). Dentro do contêiner da API (que já tem `META_WABA_ID`/`META_WABA_TOKEN`):
+
+```bash
+# criar/enviar para aprovação
+docker compose exec crm-api node dist/scripts/criar-templates-retomada.js
+# acompanhar o status de aprovação (APPROVED/PENDING/REJECTED)
+docker compose exec crm-api node dist/scripts/checar-templates-retomada.js
+```
+
+O token precisa da permissão `whatsapp_business_management`. A aprovação é da Meta (minutos a horas).
 
 ## Se alterar algum texto
 

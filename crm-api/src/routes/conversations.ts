@@ -199,7 +199,7 @@ export default async function conversationRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>('/leads/:id/reengage', async (req, reply) => {
     const { subject, variant } = z
       .object({
-        subject: z.string().trim().min(1).max(120),
+        subject: z.string().trim().min(1).max(300),
         variant: z.enum(REENGAGE_VARIANTS as [string, ...string[]]).default('leve'),
       })
       .parse(req.body);

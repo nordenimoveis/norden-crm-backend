@@ -99,18 +99,19 @@ test('mapeamento tolerante do Imobzi', () => {
 
 test('variações de retomada: preview conectado ao cliente e ao assunto', () => {
   const ctx = { lead_first_name: 'Diana', broker_first_name: 'Ana' };
-  // Todas as variações cumprem o contrato: personalizam, citam o assunto e fecham com pergunta.
+  // Todas as variações cumprem o contrato: personalizam, citam o assunto e fecham com frase completa.
   for (const v of REENGAGE_VARIANTS) {
     const p = reengagePreview(v, ctx, 'o book do Origem Jurerê');
     assert.match(p, /Diana/);
     assert.match(p, /Ana/);
     assert.match(p, /o book do Origem Jurerê/);
-    assert.match(p.trim(), /\?$/); // sempre termina com pergunta
+    assert.match(p.trim(), /[.?!]$/); // termina com pontuação de frase
     assert.doesNotMatch(p, /\{\{/); // nenhuma variável sobrou
   }
-  // Fallback de nome quando o lead não tem primeiro nome.
+  // Fallback quando o lead não tem primeiro nome: "Olá, ." vira "Olá! ".
   const semNome = reengagePreview('leve', { broker_first_name: 'Ana' }, 'a tabela');
-  assert.match(semNome, /Oi tudo bem, tudo bem\?/);
+  assert.match(semNome, /Olá! Aqui é Ana/);
+  assert.match(semNome, /a tabela/);
 });
 
 test('CTWA: produto a partir de texto pré-preenchido com rótulo', () => {

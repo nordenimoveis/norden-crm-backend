@@ -11,9 +11,9 @@ import type { TemplateContext } from '../lib/template.js';
  * O texto aqui deve espelhar EXATAMENTE o corpo aprovado na Meta, porque é a
  * fonte do preview mostrado ao corretor e do que será efetivamente enviado.
  */
-export type ReengageVariant = 'leve' | 'material' | 'novidade' | 'despedida';
+export type ReengageVariant = 'leve' | 'material' | 'novidade' | 'despedida' | 'livre';
 
-export const REENGAGE_VARIANTS: ReengageVariant[] = ['leve', 'material', 'novidade', 'despedida'];
+export const REENGAGE_VARIANTS: ReengageVariant[] = ['leve', 'material', 'novidade', 'despedida', 'livre'];
 
 interface VariantDef {
   /** Rótulo curto para o seletor no painel. */
@@ -22,6 +22,10 @@ interface VariantDef {
   templateName: () => string;
   /** Corpo com as variáveis numeradas, idêntico ao aprovado na Meta. */
   body: string;
+  /** Valor de amostra do {{3}} enviado à Meta na aprovação do template. */
+  sample: string;
+  /** Variação de texto livre: {{3}} é a frase inteira (campo maior no painel). */
+  free?: boolean;
 }
 
 const DEFS: Record<ReengageVariant, VariantDef> = {
@@ -29,25 +33,37 @@ const DEFS: Record<ReengageVariant, VariantDef> = {
     label: 'Retomada leve',
     templateName: () => env().TEMPLATE_RETOMADA,
     body:
-      'Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Fiquei pensando na nossa conversa sobre {{3}} e queria saber como você está — a ideia seguiu de pé ou surgiu alguma dúvida que eu possa esclarecer com você?',
+      'Olá, {{1}}. Aqui é {{2}}, da Norden Imóveis. Passando para retomar nossa conversa sobre {{3}} e saber como você está nesse momento. Qualquer dúvida, é só me dizer que acompanho com você.',
+    sample: 'o apartamento na Beira-Mar',
   },
   material: {
     label: 'Material enviado',
     templateName: () => env().TEMPLATE_RETOMADA_MATERIAL,
     body:
-      'Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Sei que a rotina corre, então passo com calma: o material que te enviei sobre {{3}} fez sentido para o que você procura, ou tem algo que eu possa ajustar para ficar mais a sua cara?',
+      'Olá, {{1}}. Aqui é {{2}}, da Norden Imóveis. Sem pressa — sei que a rotina corre. Queria saber se o material que te enviei sobre {{3}} fez sentido, ou se tem algo que eu possa ajustar para ficar mais a sua cara.',
+    sample: 'o apartamento na Beira-Mar',
   },
   novidade: {
     label: 'Novidade para mostrar',
     templateName: () => env().TEMPLATE_RETOMADA_NOVIDADE,
     body:
-      'Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Lembrei de você: surgiu uma novidade sobre {{3}} que tem tudo a ver com o que você me contou. Posso te mostrar para a gente ver juntos se encaixa?',
+      'Olá, {{1}}. Aqui é {{2}}, da Norden Imóveis. Lembrei de você: surgiu algo novo que pode ter a ver com {{3}}. Se achar que vale, te mostro sem compromisso para vermos juntos.',
+    sample: 'o apartamento na Beira-Mar',
   },
   despedida: {
     label: 'Último toque, respeitoso',
     templateName: () => env().TEMPLATE_RETOMADA_DESPEDIDA,
     body:
-      'Oi {{1}}, tudo bem? Aqui é {{2}}, da Norden. Respeito total o seu tempo e não quero insistir — só queria saber se {{3}} ainda está nos seus planos ou se prefere retomar mais para frente. Como fica melhor para você?',
+      'Olá, {{1}}. Aqui é {{2}}, da Norden Imóveis. Respeito totalmente o seu tempo e não quero insistir. Só queria entender se {{3}} ainda faz parte dos seus planos, ou se prefere retomar mais adiante. Como for melhor para você, eu acompanho.',
+    sample: 'o apartamento na Beira-Mar',
+  },
+  livre: {
+    label: 'Mensagem livre',
+    templateName: () => env().TEMPLATE_RETOMADA_LIVRE,
+    body:
+      'Olá, {{1}}. Aqui é {{2}}, da Norden Imóveis. {{3}} Fico à disposição para seguirmos quando for melhor para você.',
+    sample: 'Consegui a condição que comentei e lembrei de você.',
+    free: true,
   },
 };
 
@@ -56,12 +72,14 @@ const DEFS: Record<ReengageVariant, VariantDef> = {
  * assunto. Função pura (não lê env), para espelhar exatamente o que será enviado.
  */
 export function reengagePreview(variant: ReengageVariant, ctx: TemplateContext, subject: string): string {
-  const lead = (ctx.lead_first_name ?? '').trim() || 'tudo bem';
+  const lead = (ctx.lead_first_name ?? '').trim();
   const broker = (ctx.broker_first_name ?? '').trim() || 'a Norden';
-  return DEFS[variant].body
+  const out = DEFS[variant].body
     .replace(/\{\{\s*1\s*\}\}/g, lead)
     .replace(/\{\{\s*2\s*\}\}/g, broker)
     .replace(/\{\{\s*3\s*\}\}/g, subject);
+  // Sem primeiro nome do cliente: "Olá, . Aqui é" vira "Olá! Aqui é".
+  return out.replace(/Olá,\s*\.\s*/g, 'Olá! ');
 }
 
 /**
@@ -81,11 +99,36 @@ export function renderReengage(
 }
 
 /** Catálogo das variações (para o painel montar o seletor e o preview ao vivo). */
-export function reengageCatalog(): { variant: ReengageVariant; label: string; template: string; body: string }[] {
+export function reengageCatalog(): { variant: ReengageVariant; label: string; template: string; body: string; free: boolean }[] {
   return REENGAGE_VARIANTS.map((v) => ({
     variant: v,
     label: DEFS[v].label,
     template: DEFS[v].templateName(),
     body: DEFS[v].body,
+    free: DEFS[v].free ?? false,
+  }));
+}
+
+/**
+ * Definições dos templates de retomada no formato de criação da Graph API da Meta
+ * (nome, idioma, categoria, corpo e a amostra do {{3}}). Usado pelo script que
+ * cria/aprova os templates — a fonte do corpo é a mesma do preview, então nunca
+ * saem de sincronia.
+ */
+export function reengageMetaTemplates(): {
+  variant: ReengageVariant;
+  name: string;
+  language: string;
+  category: string;
+  body: string;
+  sample: string;
+}[] {
+  return REENGAGE_VARIANTS.map((v) => ({
+    variant: v,
+    name: DEFS[v].templateName(),
+    language: 'pt_BR',
+    category: 'MARKETING',
+    body: DEFS[v].body,
+    sample: DEFS[v].sample,
   }));
 }

@@ -47,6 +47,8 @@ const EnvSchema = z.object({
   TEMPLATE_RETOMADA_MATERIAL: z.string().default('norden_retomada_material'),
   TEMPLATE_RETOMADA_NOVIDADE: z.string().default('norden_retomada_novidade'),
   TEMPLATE_RETOMADA_DESPEDIDA: z.string().default('norden_retomada_despedida'),
+  /** Retomada "mensagem livre": o {{3}} é a frase inteira escrita pelo corretor. */
+  TEMPLATE_RETOMADA_LIVRE: z.string().default('norden_retomada_livre'),
   TEMPLATE_LANGUAGE: z.string().default('pt_BR'),
   TEMPLATE_CATEGORY: z.string().default('MARKETING'),
   /** Quando false, a cadência só registra o que enviaria (útil para testes antes da aprovação dos templates). */
